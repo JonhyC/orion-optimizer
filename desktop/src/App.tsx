@@ -130,16 +130,18 @@ function money(cents: number): string {
 export default function App() {
   const [settings, setSettings] = useState<LoginSettings | null>(null);
   const [profile, setProfile] = useState<SystemProfile | null>(null);
+  const [appVersion, setAppVersion] = useState("");
   const [catalog, setCatalog] = useState<CatalogState | null>(null);
   const [view, setView] = useState<View>("catalog");
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [toast, setToast] = useState<{ tone: "good" | "bad"; message: string } | null>(null);
 
   useEffect(() => {
-    Promise.all([window.orion.getSettings(), window.orion.profile()])
-      .then(([stored, detected]) => {
+    Promise.all([window.orion.getSettings(), window.orion.profile(), window.orion.appVersion()])
+      .then(([stored, detected, version]) => {
         setSettings(stored);
         setProfile(detected);
+        setAppVersion(version);
       })
       .catch((error) => {
         setSettings({ server: "http://localhost:3400", username: "" });
@@ -175,7 +177,7 @@ export default function App() {
 
   return (
     <div className="app-frame">
-      <TitleBar />
+      <TitleBar version={appVersion} />
       <AnimatePresence mode="wait">
         {!catalog ? (
           <LoginScreen key="login" settings={settings} onLogin={handleLogin} profile={profile} />
@@ -217,17 +219,20 @@ export default function App() {
   );
 }
 
-function TitleBar() {
+function TitleBar({ version }: { version: string }) {
   return (
     <div className="titlebar">
       <div className="titlebar-brand">
         <img src={logo} alt="" />
         <span>ORION OPTIMIZER</span>
       </div>
-      <div className="window-controls">
-        <button onClick={() => window.orion.minimize()} aria-label="Minimizar"><Minus size={14} /></button>
-        <button onClick={() => window.orion.maximize()} aria-label="Maximizar"><Square size={11} /></button>
-        <button className="close" onClick={() => window.orion.close()} aria-label="Fechar"><X size={15} /></button>
+      <div className="titlebar-right">
+        {version && <span className="app-version" title={`Orion Optimizer ${version}`}>v{version}</span>}
+        <div className="window-controls">
+          <button onClick={() => window.orion.minimize()} aria-label="Minimizar"><Minus size={14} /></button>
+          <button onClick={() => window.orion.maximize()} aria-label="Maximizar"><Square size={11} /></button>
+          <button className="close" onClick={() => window.orion.close()} aria-label="Fechar"><X size={15} /></button>
+        </div>
       </div>
     </div>
   );

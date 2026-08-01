@@ -297,6 +297,7 @@ async function authorizedTweak(id, revalidate = false) {
 }
 
 function registerIpc() {
+  ipcMain.handle("app:version", () => app.getVersion());
   ipcMain.handle("settings:get", readSettings);
   ipcMain.handle("settings:save", (_event, settings) => saveSettings(settings));
   ipcMain.handle("system:profile", async () => {

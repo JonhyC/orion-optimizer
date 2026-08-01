@@ -29,6 +29,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid rgba(155, 99, 234
 .titlebar { position: fixed; z-index: 100; inset: 0 0 auto 0; height: 42px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,.045); background: rgba(7,9,13,.96); -webkit-app-region: drag; }
 .titlebar-brand { display: flex; align-items: center; gap: 8px; height: 100%; padding-left: 14px; color: #818b9c; font-family: Sora, sans-serif; font-size: 10px; font-weight: 600; }
 .titlebar-brand img { width: 20px; height: 20px; border-radius: 5px; }
+.titlebar-right { display: flex; align-items: center; height: 100%; -webkit-app-region: no-drag; }
+.app-version { padding: 3px 7px; border: 1px solid var(--border); border-radius: 4px; color: #657083; font-family: Consolas, monospace; font-size: 9px; font-weight: 600; line-height: 1; }
 .window-controls { display: flex; height: 100%; padding-right: 4px; -webkit-app-region: no-drag; }
 .window-controls button { width: 45px; border: 0; background: transparent; color: #7c8798; display: grid; place-items: center; transition: background .16s, color .16s; }
 .window-controls button:hover { background: rgba(255,255,255,.06); color: #fff; }

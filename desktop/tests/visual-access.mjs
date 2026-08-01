@@ -4,6 +4,7 @@ import path from "node:path";
 const cdpBase = process.argv[2] ?? "http://127.0.0.1:9333";
 const appUrl = process.argv[3] ?? "http://127.0.0.1:5174";
 const outputDir = path.resolve("tests", "screenshots");
+const packageVersion = JSON.parse(await fs.readFile(path.resolve("package.json"), "utf8")).version;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const targets = await fetch(`${cdpBase}/json/list`).then((response) => response.json());
@@ -67,6 +68,7 @@ const mockSource = `
       support_lifetime: fixture === "special" || internalRoles.has(fixture),
     };
     window.orion = {
+      appVersion: async () => "${packageVersion}",
       getSettings: async () => ({ server: "http://localhost:3400", username: "orion.visual" }),
       saveSettings: async () => undefined,
       profile: async () => ({ isAdmin: true, chassis: "desktop", gpuVendor: "NVIDIA", gpuVendors: ["NVIDIA"], gpuTypes: ["dedicated"], gpuNames: ["NVIDIA GeForce RTX"], ramGB: 32, hwid: "visual", executionMode: "Mock" }),
@@ -125,7 +127,7 @@ for (const fixture of ["basic", "pro", "ultimate", "special", "staff", "develope
     await sleep(700);
   }
   const state = await send("Runtime.evaluate", {
-    expression: `JSON.stringify({ title: document.querySelector('.page-header h1')?.textContent, cards: document.querySelectorAll('.tweak-card').length, tools: document.querySelectorAll('.internal-tool').length, capabilities: document.querySelectorAll('.capability-row').length, operationMetrics: document.querySelectorAll('.operation-metric').length, people: document.querySelectorAll('.presence-row').length, activity: document.querySelectorAll('.activity-entry').length, hasStandard: document.body.textContent.includes('Standard'), avatarLoaded: Boolean(document.querySelector('.avatar img')?.complete && document.querySelector('.avatar img')?.naturalWidth), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth })`,
+    expression: `JSON.stringify({ title: document.querySelector('.page-header h1')?.textContent, version: document.querySelector('.app-version')?.textContent, cards: document.querySelectorAll('.tweak-card').length, tools: document.querySelectorAll('.internal-tool').length, capabilities: document.querySelectorAll('.capability-row').length, operationMetrics: document.querySelectorAll('.operation-metric').length, people: document.querySelectorAll('.presence-row').length, activity: document.querySelectorAll('.activity-entry').length, hasStandard: document.body.textContent.includes('Standard'), avatarLoaded: Boolean(document.querySelector('.avatar img')?.complete && document.querySelector('.avatar img')?.naturalWidth), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth })`,
     returnByValue: true,
   });
   const screenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });

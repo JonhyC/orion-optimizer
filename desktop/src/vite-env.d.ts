@@ -111,6 +111,7 @@ type InternalOverview = {
 };
 
 type OrionApi = {
+  appVersion(): Promise<string>;
   getSettings(): Promise<{ server: string; username: string }>;
   saveSettings(settings: { server: string; username: string }): Promise<void>;
   login(credentials: {
