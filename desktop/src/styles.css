@@ -9,6 +9,9 @@
   --surface-2: #121824;
   --surface-3: #171e2a;
   --border: rgba(255, 255, 255, 0.075);
+  /* Contorno de realce (hover, foco). No escuro continua neutro: o fundo
+     ja da a identidade e um roxo aqui competiria com os acentos. */
+  --border-strong: rgba(255, 255, 255, 0.16);
   --text-2: #98a2b3;
   --text-3: #667085;
   --violet: #9b63ea;
@@ -37,7 +40,13 @@
   --surface: #ffffff;
   --surface-2: #f4f6fa;
   --surface-3: #e9edf4;
-  --border: rgba(23, 32, 51, .105);
+  /* Contornos com o roxo da marca em vez de cinzento neutro. No escuro a
+     identidade vem do fundo; no claro o fundo e quase branco, portanto se
+     as linhas forem cinzentas a aplicacao perde a cor toda e podia ser de
+     qualquer pessoa. O alfa e baixo de proposito: acima de ~.2 cada cartao
+     comeca a parecer seleccionado. */
+  --border: rgba(135, 80, 212, .17);
+  --border-strong: rgba(135, 80, 212, .3);
   --text: #172033;
   --title: #101828;
   --text-2: #4f5c70;
@@ -49,7 +58,9 @@
   --surface-hover: #f7f4fd;
   --modal-surface: #ffffff;
   --backdrop: rgba(25, 31, 43, .46);
-  --shadow: rgba(37, 44, 62, .16);
+  /* Sombra tambem puxada ao roxo: uma sombra cinzenta por baixo de um
+     contorno roxo le-se como sujidade. */
+  --shadow: rgba(96, 51, 160, .15);
   --violet: #8750d4;
   --violet-strong: #7540c0;
   --cyan: #188ba3;
@@ -66,7 +77,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid rgba(155, 99, 234
 body { color: var(--text); background: var(--bg); }
 
 .app-frame { width: 100%; height: 100%; background: var(--bg); }
-.titlebar { position: fixed; z-index: 100; inset: 0 0 auto 0; height: 42px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,.045); background: rgba(7,9,13,.96); -webkit-app-region: drag; }
+.titlebar { position: fixed; z-index: 100; inset: 0 0 auto 0; height: 42px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: var(--topbar); -webkit-app-region: drag; }
 .titlebar-brand { display: flex; align-items: center; gap: 8px; height: 100%; padding-left: 14px; color: #818b9c; font-family: Sora, sans-serif; font-size: 10px; font-weight: 600; }
 .titlebar-brand img { width: 20px; height: 20px; border-radius: 5px; }
 .titlebar-right { display: flex; align-items: center; height: 100%; -webkit-app-region: no-drag; }
@@ -120,7 +131,7 @@ body { color: var(--text); background: var(--bg); }
 .primary:hover:not(:disabled) { background: var(--violet-strong); transform: translateY(-1px); }
 .primary:disabled, .secondary:disabled { opacity: .45; cursor: not-allowed; }
 .secondary { border-color: var(--border); background: var(--surface-2); color: #b8c0cc; }
-.secondary:hover:not(:disabled) { border-color: rgba(255,255,255,.16); background: var(--surface-3); color: #fff; }
+.secondary:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-3); color: var(--title); }
 .login-button { width: 100%; margin-top: 24px; height: 46px; }
 .secure-note { margin-top: 15px; display: flex; align-items: center; justify-content: center; gap: 7px; color: #596477; font-size: 10.5px; }
 .secure-note svg { color: var(--green); }
@@ -159,7 +170,7 @@ body { color: var(--text); background: var(--bg); }
 .mode-badge { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 11px; border: 1px solid var(--border); border-radius: 6px; color: #8b95a5; font-size: 10.5px; font-weight: 600; }
 .mode-badge.simulation { color: var(--amber); border-color: rgba(225,170,80,.2); background: rgba(225,170,80,.05); }
 .icon-button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
-.icon-button:hover { color: #fff; border-color: rgba(255,255,255,.15); }
+.icon-button:hover { color: var(--title); border-color: var(--border-strong); }
 .system-summary { margin-top: 25px; display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--border); }
 .summary-item { min-width: 0; display: flex; align-items: center; gap: 11px; padding: 15px 17px; background: var(--surface); }
 .summary-item > span { width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 6px; background: rgba(71,183,204,.08); color: var(--cyan); }
@@ -208,7 +219,7 @@ body { color: var(--text); background: var(--bg); }
 .apply-button.applied { border-color: rgba(82,201,139,.22); background: rgba(82,201,139,.07); color: var(--green); }
 
 .modal-backdrop { position: fixed; z-index: 200; inset: 42px 0 0; display: grid; place-items: center; padding: 24px; background: rgba(2,3,5,.8); backdrop-filter: blur(7px); }
-.modal { position: relative; width: min(680px, 100%); max-height: calc(100vh - 100px); overflow-y: auto; padding: 25px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: #0c1017; box-shadow: 0 24px 80px rgba(0,0,0,.45); }
+.modal { position: relative; width: min(680px, 100%); max-height: calc(100vh - 100px); overflow-y: auto; padding: 25px; border: 1px solid var(--border); border-radius: 8px; background: var(--modal-surface); box-shadow: 0 24px 80px var(--shadow); }
 .modal-close { position: absolute; top: 15px; right: 15px; width: 30px; height: 30px; display: grid; place-items: center; }
 .modal-heading { padding-right: 32px; }
 .modal-heading h2 { margin: 9px 0 0; font-family: Sora, sans-serif; font-size: 18px; }
