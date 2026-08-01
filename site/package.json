@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node server.mjs",
     "build": "next build",
+    "build:check": "node scripts/build-check.mjs",
     "start": "node server.mjs --production",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
