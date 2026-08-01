@@ -1,0 +1,28 @@
+# Dependencias e output de build sao refeitos dentro da imagem.
+**/node_modules
+site/.next
+site/.next-dev
+desktop/dist
+desktop/release
+desktop/release-new
+desktop/build
+
+# Dados: nunca entram na imagem. Vivem no volume.
+data
+server/data
+site/tmp
+**/*.sqlite
+**/*.sqlite-wal
+**/*.sqlite-shm
+**/.env.local
+
+# Nao fazem parte do site.
+desktop
+client
+server
+web
+tests
+.git
+.claude
+**/*.log
+site/public/downloads

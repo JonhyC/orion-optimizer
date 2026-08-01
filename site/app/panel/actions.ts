@@ -30,6 +30,11 @@ import {
   queueDiscordRoleSync,
 } from "@/lib/plan-expiry";
 import { fetchDiscordGuildRoles } from "@/lib/discord";
+import {
+  PLAN_COVER_URL_PREFIX,
+  ensurePlanCoversDirectory,
+  planCoversDir,
+} from "@/lib/storage-paths";
 
 /**
  * Acoes do painel.
@@ -565,19 +570,18 @@ async function savePlanCover(formData: FormData): Promise<string | undefined> {
     (cover.type === "image/avif" && bytes.subarray(4, 12).toString("ascii").startsWith("ftypavi"));
   if (!valid) return undefined;
 
-  const directory = path.join(process.cwd(), "public", "uploads", "plans");
-  await fs.mkdir(directory, { recursive: true });
+  ensurePlanCoversDirectory();
 
   const filename = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
-  await fs.writeFile(path.join(directory, filename), bytes);
-  return `/uploads/plans/${filename}`;
+  await fs.writeFile(path.join(planCoversDir, filename), bytes);
+  return `${PLAN_COVER_URL_PREFIX}/${filename}`;
 }
 
 async function removePlanCoverFile(coverUrl: string | null): Promise<void> {
   if (!coverUrl || !/^\/uploads\/plans\/[a-zA-Z0-9._-]+$/.test(coverUrl)) return;
   const filename = path.basename(coverUrl);
   try {
-    await fs.unlink(path.join(process.cwd(), "public", "uploads", "plans", filename));
+    await fs.unlink(path.join(planCoversDir, filename));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
