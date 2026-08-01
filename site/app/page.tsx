@@ -19,8 +19,9 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const stats = publicStats();
   const reviews = publishedReviews();
-  const plans = activePlans();
-  const user = await currentUser();
+  // activePlans passou a assincrono ao sair do SQLite: o Firestore so
+  // responde por rede. Vai em paralelo com a sessao para nao somar esperas.
+  const [plans, user] = await Promise.all([activePlans(), currentUser()]);
 
   return (
     <>

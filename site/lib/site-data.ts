@@ -73,53 +73,10 @@ export function publicStats(): PublicStats {
   };
 }
 
-export type PublicPlan = {
-  id: number;
-  code: string;
-  name: string;
-  description: string | null;
-  price_cents: number;
-  currency: string;
-  days: number;
-  support_days: number | null;
-  cover_url: string | null;
-  badge_text: string | null;
-  badge_active: number;
-  compare_at_cents: number | null;
-  discount_active: number;
-  promo_text: string | null;
-  features: string[];
-  cta_text: string;
-};
-
-export function activePlans(): PublicPlan[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT id, code, name, description, price_cents, currency, days, support_days, cover_url,
-              badge_text, badge_active, compare_at_cents, discount_active, promo_text,
-              features_json, cta_text
-       FROM plans WHERE active = 1 ORDER BY sort_order`,
-    )
-    .all() as Array<Omit<PublicPlan, "features"> & { features_json: string | null }>;
-
-  return rows.map(({ features_json, ...row }) => ({
-    ...row,
-    cta_text: row.cta_text || `Get ${row.name}`,
-    features: parsePlanFeatures(features_json),
-  }));
-}
-
-function parsePlanFeatures(value: string | null): string[] {
-  if (!value) return [];
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
-      : [];
-  } catch {
-    return [];
-  }
-}
+// Os planos passaram para lib/plans.ts, que ja sabe ler do Firestore.
+// Reexportados daqui para os imports existentes continuarem validos.
+export { activePlans } from "./plans.ts";
+export type { PublicPlan } from "./plans.ts";
 
 export function nowTs(): number {
   return nowSeconds();
