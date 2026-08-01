@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
   Activity,
   ArrowLeft,
@@ -19,6 +19,7 @@ import {
   LogOut,
   MemoryStick,
   Minus,
+  Moon,
   MonitorCog,
   Network,
   PackageCheck,
@@ -31,6 +32,7 @@ import {
   ShoppingBag,
   Sparkles,
   Square,
+  Sun,
   UserRound,
   Users,
   Wifi,
@@ -40,7 +42,9 @@ import {
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import logo from "./assets/orion.svg";
 
-type View = "catalog" | "history" | "system" | "internal";
+type View = "catalog" | "history" | "settings" | "internal";
+type Theme = "dark" | "light";
+type Density = "comfortable" | "compact";
 type LoginSettings = { server: string; username: string };
 type CatalogState = Awaited<ReturnType<OrionApi["catalog"]>>;
 
@@ -135,6 +139,18 @@ export default function App() {
   const [view, setView] = useState<View>("catalog");
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [toast, setToast] = useState<{ tone: "good" | "bad"; message: string } | null>(null);
+  const [theme, setTheme] = useState<Theme>(() => localStorage.getItem("orion-theme") === "light" ? "light" : "dark");
+  const [animations, setAnimations] = useState(() => localStorage.getItem("orion-animations") !== "off");
+  const [density, setDensity] = useState<Density>(() => localStorage.getItem("orion-density") === "compact" ? "compact" : "comfortable");
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.density = density;
+    document.documentElement.dataset.motion = animations ? "full" : "reduced";
+    localStorage.setItem("orion-theme", theme);
+    localStorage.setItem("orion-density", density);
+    localStorage.setItem("orion-animations", animations ? "on" : "off");
+  }, [animations, density, theme]);
 
   useEffect(() => {
     Promise.all([window.orion.getSettings(), window.orion.profile(), window.orion.appVersion()])
@@ -173,11 +189,12 @@ export default function App() {
     setView("catalog");
   }
 
-  if (!settings) return <BootScreen />;
+  if (!settings) return <MotionConfig reducedMotion={animations ? "user" : "always"}><div className="app-frame"><TitleBar version={appVersion} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} /><BootScreen /></div></MotionConfig>;
 
   return (
+    <MotionConfig reducedMotion={animations ? "user" : "always"}>
     <div className="app-frame">
-      <TitleBar version={appVersion} />
+      <TitleBar version={appVersion} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} />
       <AnimatePresence mode="wait">
         {!catalog ? (
           <LoginScreen key="login" settings={settings} onLogin={handleLogin} profile={profile} />
@@ -203,7 +220,7 @@ export default function App() {
                   />
                 )}
                 {view === "history" && <HistoryView key="history" notify={setToast} />}
-                {view === "system" && <SystemView key="system" profile={profile} settings={settings} />}
+                {view === "settings" && <SettingsView key="settings" account={catalog.account} profile={profile} settings={settings} appVersion={appVersion} theme={theme} setTheme={setTheme} animations={animations} setAnimations={setAnimations} density={density} setDensity={setDensity} />}
                 {view === "internal" && (
                   <InternalView key="internal" state={catalog} profile={profile} settings={settings} notify={setToast} />
                 )}
@@ -216,10 +233,11 @@ export default function App() {
         {toast && <Toast {...toast} onClose={() => setToast(null)} />}
       </AnimatePresence>
     </div>
+    </MotionConfig>
   );
 }
 
-function TitleBar({ version }: { version: string }) {
+function TitleBar({ version, theme, onToggleTheme }: { version: string; theme: Theme; onToggleTheme: () => void }) {
   return (
     <div className="titlebar">
       <div className="titlebar-brand">
@@ -228,6 +246,7 @@ function TitleBar({ version }: { version: string }) {
       </div>
       <div className="titlebar-right">
         {version && <span className="app-version" title={`Orion Optimizer ${version}`}>v{version}</span>}
+        <button className="titlebar-theme" onClick={onToggleTheme} title={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"} aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}>{theme === "dark" ? <Sun size={13} /> : <Moon size={13} />}</button>
         <div className="window-controls">
           <button onClick={() => window.orion.minimize()} aria-label="Minimizar"><Minus size={14} /></button>
           <button onClick={() => window.orion.maximize()} aria-label="Maximizar"><Square size={11} /></button>
@@ -364,14 +383,16 @@ function Sidebar({ view, setView, account, onLogout }: { view: View; setView: (v
   return (
     <aside className="sidebar">
       <div className="sidebar-logo"><img src={logo} alt="" /><div><b>ORION</b><span>OPTIMIZER</span></div></div>
+      <span className="sidebar-nav-label">PRINCIPAL</span>
       <nav>
         <NavButton active={view === "catalog"} icon={<Gauge />} label="Otimizações" onClick={() => setView("catalog")} />
         <NavButton active={view === "history"} icon={<History />} label="Histórico" onClick={() => setView("history")} />
-        <NavButton active={view === "system"} icon={<Settings2 />} label="Sistema" onClick={() => setView("system")} />
+        <NavButton active={view === "settings"} icon={<Settings2 />} label="Definições" onClick={() => setView("settings")} />
         {INTERNAL_ROLES.has(account.role) && (
           <NavButton active={view === "internal"} icon={<Crown />} label="Equipa" onClick={() => setView("internal")} />
         )}
       </nav>
+      <div className="sidebar-status"><span><StatusDot good /><b>Proteção ativa</b></span><small>Alterações reversíveis</small></div>
       <div className="sidebar-account">
         <div className="avatar">
           {account.discord_avatar_url ? (
@@ -960,7 +981,18 @@ function OperationMetric({ label, value, detail, tone = "default" }: { label: st
   return <div className={`operation-metric ${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>;
 }
 
-function SystemView({ profile, settings }: { profile: SystemProfile | null; settings: LoginSettings }) {
+function SettingsView({ account, profile, settings, appVersion, theme, setTheme, animations, setAnimations, density, setDensity }: {
+  account: OrionAccount;
+  profile: SystemProfile | null;
+  settings: LoginSettings;
+  appVersion: string;
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+  animations: boolean;
+  setAnimations: (enabled: boolean) => void;
+  density: Density;
+  setDensity: (density: Density) => void;
+}) {
   const rows = [
     { icon: <Laptop />, label: "Tipo de dispositivo", value: profile?.chassis === "laptop" ? "Portátil" : "Desktop" },
     { icon: <MonitorCog />, label: "Adaptadores gráficos", value: profile?.gpuNames?.join(" · ") || "Não detetado" },
@@ -969,7 +1001,50 @@ function SystemView({ profile, settings }: { profile: SystemProfile | null; sett
     { icon: <Activity />, label: "Motor de execução", value: profile?.executionMode === "Mock" ? "Simulação" : "Real" },
     { icon: <Wifi />, label: "Servidor", value: settings.server },
   ];
-  return <PageMotion><header className="page-header"><div><span className="eyebrow">DISPOSITIVO</span><h1>Sistema</h1><p>Hardware e estado do motor Orion</p></div></header><div className="system-list">{rows.map((row) => <div className="system-row" key={row.label}><div className="system-row-icon">{row.icon}</div><div><span>{row.label}</span><strong>{row.value}</strong></div><Check size={16} className="system-check" /></div>)}</div><section className="safety-band"><ShieldCheck size={22} /><div><strong>Proteção de reversão ativa</strong><span>O estado original é guardado antes de cada alteração.</span></div></section></PageMotion>;
+  return (
+    <PageMotion>
+      <header className="page-header"><div><span className="eyebrow">PREFERÊNCIAS</span><h1>Definições</h1><p>Conta, aparência e ambiente do Optimizer</p></div><span className="settings-version">Orion v{appVersion || "..."}</span></header>
+
+      <section className="settings-profile">
+        <div className="settings-avatar">{account.discord_avatar_url ? <img src={account.discord_avatar_url} alt="" referrerPolicy="no-referrer" /> : <UserRound size={28} />}</div>
+        <div className="settings-identity"><span className="eyebrow">CONTA ORION</span><h2>{account.display_name || account.username}</h2><p>@{account.username}</p></div>
+        <div className="settings-badges"><span><ShieldCheck size={13} />{account.discord_verified ? "Discord verificado" : "Discord por verificar"}</span><span><Crown size={13} />{ROLE_LABEL[account.role] ?? account.role}</span><span>{account.tier ? tierLabel(account.tier) : "Acesso interno"}</span></div>
+      </section>
+
+      <div className="settings-grid">
+        <section className="settings-panel appearance-panel">
+          <div className="settings-panel-heading"><span className="settings-panel-icon"><Sparkles size={17} /></span><div><h2>Aparência</h2><p>Personaliza o ambiente da aplicação</p></div></div>
+          <div className="setting-control">
+            <div><strong>Tema</strong><span>Escolhe a aparência que preferes</span></div>
+            <div className="theme-options" role="group" aria-label="Tema da aplicação">
+              <button className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}><Moon size={15} />Escuro</button>
+              <button className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}><Sun size={15} />Claro</button>
+            </div>
+          </div>
+          <div className="setting-control">
+            <div><strong>Animações</strong><span>Transições e respostas visuais</span></div>
+            <label className="switch-label settings-switch"><input type="checkbox" checked={animations} onChange={(event) => setAnimations(event.target.checked)} /><span className="switch" /><b>{animations ? "Ativas" : "Reduzidas"}</b></label>
+          </div>
+          <div className="setting-control">
+            <div><strong>Densidade</strong><span>Ajusta o espaço entre elementos</span></div>
+            <div className="density-options" role="group" aria-label="Densidade da interface"><button className={density === "comfortable" ? "active" : ""} onClick={() => setDensity("comfortable")}>Confortável</button><button className={density === "compact" ? "active" : ""} onClick={() => setDensity("compact")}>Compacta</button></div>
+          </div>
+        </section>
+
+        <section className="settings-panel account-panel">
+          <div className="settings-panel-heading"><span className="settings-panel-icon"><UserRound size={17} /></span><div><h2>Licença e acesso</h2><p>Estado atual da tua conta</p></div></div>
+          <div className="settings-facts"><InfoLine label="Licença" value={formatExpiry(account.expires_at)} /><InfoLine label="Suporte" value={account.support_lifetime ? "Life-time" : formatExpiry(account.support_expires_at)} /><InfoLine label="Plano" value={account.tier ? tierLabel(account.tier) : "Acesso interno"} /><InfoLine label="Cargo" value={ROLE_LABEL[account.role] ?? account.role} /></div>
+        </section>
+      </div>
+
+      <section className="settings-panel device-panel">
+        <div className="settings-panel-heading"><span className="settings-panel-icon"><MonitorCog size={17} /></span><div><h2>Dispositivo e ligação</h2><p>Hardware detetado e motor de execução</p></div></div>
+        <div className="settings-device-grid">{rows.map((row) => <div className="system-row" key={row.label}><div className="system-row-icon">{row.icon}</div><div><span>{row.label}</span><strong>{row.value}</strong></div><Check size={16} className="system-check" /></div>)}</div>
+      </section>
+
+      <section className="safety-band"><ShieldCheck size={22} /><div><strong>Proteção de reversão ativa</strong><span>O estado original é guardado antes de cada alteração.</span></div></section>
+    </PageMotion>
+  );
 }
 
 function SummaryItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) { return <div className="summary-item"><span>{icon}</span><div><small>{label}</small><strong title={value}>{value}</strong></div></div>; }

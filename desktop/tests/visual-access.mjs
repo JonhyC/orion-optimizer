@@ -38,6 +38,7 @@ function send(method, params = {}) {
 
 const mockSource = `
   (() => {
+    localStorage.clear();
     const allTweaks = [
       ["ux.visual-effects", "Efeitos visuais para desempenho", 0],
       ["ux.menu-delay", "Remover atraso dos menus", 0],
@@ -112,6 +113,16 @@ await send("Page.addScriptToEvaluateOnNewDocument", { source: mockSource });
 for (const fixture of ["basic", "pro", "ultimate", "special", "staff", "developer", "owner"]) {
   await send("Page.navigate", { url: `${appUrl}/?fixture=${fixture}` });
   await sleep(1600);
+  if (fixture === "basic") {
+    const loginDark = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+    await fs.writeFile(path.join(outputDir, "login-dark.png"), Buffer.from(loginDark.data, "base64"));
+    await send("Runtime.evaluate", { expression: `document.querySelector('.titlebar-theme')?.click()` });
+    await sleep(350);
+    const loginLight = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+    await fs.writeFile(path.join(outputDir, "login-light.png"), Buffer.from(loginLight.data, "base64"));
+    await send("Runtime.evaluate", { expression: `document.querySelector('.titlebar-theme')?.click()` });
+    await sleep(250);
+  }
   await send("Runtime.evaluate", {
     expression: `(() => {
       const inputs = document.querySelectorAll('input');
@@ -122,6 +133,17 @@ for (const fixture of ["basic", "pro", "ultimate", "special", "staff", "develope
     })()`,
   });
   await sleep(1800);
+  await send("Runtime.evaluate", { expression: `[...document.querySelectorAll('button')].find((button) => button.textContent.includes('Definições'))?.click()` });
+  await sleep(500);
+  await send("Runtime.evaluate", { expression: `window.__orionSettingsTest = { profile: Boolean(document.querySelector('.settings-profile')), panels: document.querySelectorAll('.settings-panel').length }` });
+  if (fixture === "owner") {
+    await send("Runtime.evaluate", { expression: `[...document.querySelectorAll('.theme-options button')].find((button) => button.textContent.includes('Claro'))?.click()` });
+    await sleep(450);
+    const settingsScreenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+    await fs.writeFile(path.join(outputDir, "owner-settings-light.png"), Buffer.from(settingsScreenshot.data, "base64"));
+    await send("Runtime.evaluate", { expression: `window.__orionSettingsTest.light = document.documentElement.dataset.theme === 'light'; [...document.querySelectorAll('.theme-options button')].find((button) => button.textContent.includes('Escuro'))?.click()` });
+    await sleep(350);
+  }
   if (["staff", "developer", "owner"].includes(fixture)) {
     await send("Runtime.evaluate", { expression: `[...document.querySelectorAll('button')].find((button) => button.textContent.includes('Equipa'))?.click()` });
     await sleep(700);
@@ -151,9 +173,12 @@ for (const fixture of ["basic", "pro", "ultimate", "special", "staff", "develope
     await fs.writeFile(path.join(outputDir, `${fixture}-modal.png`), Buffer.from(modalScreenshot.data, "base64"));
     await send("Runtime.evaluate", { expression: `document.querySelector('.internal-tool-modal .modal-close')?.click()` });
     await sleep(300);
+  } else {
+    await send("Runtime.evaluate", { expression: `[...document.querySelectorAll('button')].find((button) => button.textContent.includes('Otimizações'))?.click()` });
+    await sleep(400);
   }
   const state = await send("Runtime.evaluate", {
-    expression: `JSON.stringify({ title: document.querySelector('.page-header h1')?.textContent, version: document.querySelector('.app-version')?.textContent, cards: document.querySelectorAll('.tweak-card').length, tools: document.querySelectorAll('.internal-tool').length, testedToolModals: window.__orionModalTest?.opened ?? 0, personModal: window.__orionModalTest?.person ?? false, capabilities: document.querySelectorAll('.capability-row').length, operationMetrics: document.querySelectorAll('.operation-metric').length, people: document.querySelectorAll('.presence-row').length, activity: document.querySelectorAll('.activity-entry').length, hasStandard: document.body.textContent.includes('Standard'), avatarLoaded: Boolean(document.querySelector('.avatar img')?.complete && document.querySelector('.avatar img')?.naturalWidth), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth })`,
+    expression: `JSON.stringify({ title: document.querySelector('.page-header h1')?.textContent, version: document.querySelector('.app-version')?.textContent, settingsProfile: window.__orionSettingsTest?.profile ?? false, settingsPanels: window.__orionSettingsTest?.panels ?? 0, lightTheme: window.__orionSettingsTest?.light ?? null, cards: document.querySelectorAll('.tweak-card').length, tools: document.querySelectorAll('.internal-tool').length, testedToolModals: window.__orionModalTest?.opened ?? 0, personModal: window.__orionModalTest?.person ?? false, capabilities: document.querySelectorAll('.capability-row').length, operationMetrics: document.querySelectorAll('.operation-metric').length, people: document.querySelectorAll('.presence-row').length, activity: document.querySelectorAll('.activity-entry').length, hasStandard: document.body.textContent.includes('Standard'), avatarLoaded: Boolean(document.querySelector('.avatar img')?.complete && document.querySelector('.avatar img')?.naturalWidth), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth })`,
     returnByValue: true,
   });
   const screenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
