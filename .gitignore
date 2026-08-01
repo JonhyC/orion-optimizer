@@ -1,0 +1,44 @@
+# Segredos. O .env.local leva o Client Secret do Discord - nunca versionar.
+.env.local
+.env*.local
+site/.env.local
+
+# Base de dados: contas, hashes de password e tokens de sessao.
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+server/data/
+
+# Journal do cliente Windows (estado original do Registry de quem o correu).
+*.journal.json
+
+# Node
+node_modules/
+.next/
+out/
+
+# Output de build do desktop: o dist/ e o bundle Vite, o release*/ leva o
+# Electron empacotado (~1.3 GB de runtime Chromium).
+desktop/dist/
+desktop/release/
+desktop/release-new/
+
+# Instalador servido pelo site. Passa dos 100 MB por ficheiro que o GitHub
+# aceita - distribuido como asset de Release em vez de versionado.
+site/public/downloads/*.exe
+*.tsbuildinfo
+next-env.d.ts
+
+# Perfis do Edge usados na automacao de browser: levam cookies, Login Data e
+# bases de autofill. Nunca versionar.
+site/tmp/
+
+# Logs do dev server (podem apanhar tokens em stack traces).
+logs/
+*.log
+
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store

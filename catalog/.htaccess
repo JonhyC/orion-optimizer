@@ -1,0 +1,11 @@
+# O catalogo so pode sair por /server/api/catalog.php, com token valido.
+# Sem isto, http://.../orionoptimizer/catalog/tweaks.json descarregava
+# o catalogo inteiro sem login e o gating nao valia nada.
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

@@ -1,0 +1,119 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+
+const cdpBase = process.argv[2] ?? "http://127.0.0.1:9333";
+const appUrl = process.argv[3] ?? "http://127.0.0.1:5174";
+const outputDir = path.resolve("tests", "screenshots");
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const targets = await fetch(`${cdpBase}/json/list`).then((response) => response.json());
+const page = targets.find((target) => target.type === "page");
+if (!page) throw new Error("Nao foi encontrado um separador no Edge de teste.");
+
+const socket = new WebSocket(page.webSocketDebuggerUrl);
+const pending = new Map();
+let nextId = 1;
+
+socket.addEventListener("message", (event) => {
+  const message = JSON.parse(event.data);
+  if (!message.id) return;
+  const request = pending.get(message.id);
+  if (!request) return;
+  pending.delete(message.id);
+  if (message.error) request.reject(new Error(message.error.message));
+  else request.resolve(message.result);
+});
+
+await new Promise((resolve, reject) => {
+  socket.addEventListener("open", resolve, { once: true });
+  socket.addEventListener("error", reject, { once: true });
+});
+
+function send(method, params = {}) {
+  const id = nextId++;
+  socket.send(JSON.stringify({ id, method, params }));
+  return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+}
+
+const mockSource = `
+  (() => {
+    const allTweaks = [
+      ["ux.visual-effects", "Efeitos visuais para desempenho", 0],
+      ["ux.menu-delay", "Remover atraso dos menus", 0],
+      ["privacy.advertising-id", "Desativar ID de publicidade", 0],
+      ["privacy.content-delivery", "Desativar sugestoes e instalacoes silenciosas", 0],
+      ["game.dvr-background", "Desativar gravacao em background", 0],
+      ["game.gamebar-startup", "Desativar painel da Game Bar", 0],
+      ["net.throttling-index", "Desativar Network Throttling", 1],
+      ["mmcss.games-priority", "Prioridade MMCSS para jogos", 1],
+      ["gpu.hags", "GPU Hardware-Accelerated Scheduling", 1],
+      ["power.high-performance-bias", "Reduzir parking de nucleos de CPU", 1],
+    ].map(([id, name, layer]) => ({ id, name, layer, description: "Ajuste Orion verificado e reversivel.", impact: "medio", risk: "baixo", requiresReboot: layer === 1, actions: [] }));
+    const fixture = new URLSearchParams(location.search).get("fixture") || "basic";
+    const counts = { basic: 6, pro: 8, ultimate: 10, special: 10, owner: 10 };
+    const role = fixture === "owner" ? "owner" : "client";
+    const tier = fixture === "owner" ? "orion" : fixture;
+    const tweaks = allTweaks.slice(0, counts[fixture] || 6);
+    const account = {
+      username: "orion.visual",
+      display_name: fixture === "owner" ? "Orion Owner" : "Membro " + fixture[0].toUpperCase() + fixture.slice(1),
+      discord_avatar_url: "https://cdn.discordapp.com/embed/avatars/0.png",
+      role,
+      tier,
+      discord_verified: true,
+      expires_at: fixture === "special" || fixture === "owner" ? null : Math.floor(Date.now() / 1000) + 86400 * 30,
+      support_expires_at: null,
+      support_lifetime: fixture === "special" || fixture === "owner",
+    };
+    window.orion = {
+      getSettings: async () => ({ server: "http://localhost:3400", username: "orion.visual" }),
+      saveSettings: async () => undefined,
+      profile: async () => ({ isAdmin: true, chassis: "desktop", gpuVendor: "NVIDIA", gpuVendors: ["NVIDIA"], gpuTypes: ["dedicated"], gpuNames: ["NVIDIA GeForce RTX"], ramGB: 32, hwid: "visual", executionMode: "Mock" }),
+      login: async () => ({ user: account, server: "http://localhost:3400" }),
+      logout: async () => true,
+      catalog: async () => ({ tweaks, eligibility: Object.fromEntries(tweaks.map((t) => [t.id, { eligible: true, reason: "" }])), account }),
+      preview: async () => [], apply: async () => ({ sessionId: "visual", changes: [] }),
+      sessions: async () => [], rollback: async () => [], openPortal: async () => true,
+      minimize() {}, maximize() {}, close() {},
+    };
+  })();
+`;
+
+await fs.mkdir(outputDir, { recursive: true });
+await send("Page.enable");
+await send("Runtime.enable");
+await send("Emulation.setDeviceMetricsOverride", {
+  width: 1280,
+  height: 800,
+  deviceScaleFactor: 1,
+  mobile: false,
+});
+await send("Page.addScriptToEvaluateOnNewDocument", { source: mockSource });
+
+for (const fixture of ["basic", "pro", "ultimate", "special", "owner"]) {
+  await send("Page.navigate", { url: `${appUrl}/?fixture=${fixture}` });
+  await sleep(1600);
+  await send("Runtime.evaluate", {
+    expression: `(() => {
+      const inputs = document.querySelectorAll('input');
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      set.call(inputs[0], 'orion.visual'); inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+      set.call(inputs[1], 'visual-password'); inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('form').requestSubmit();
+    })()`,
+  });
+  await sleep(1800);
+  if (fixture === "owner") {
+    await send("Runtime.evaluate", { expression: `[...document.querySelectorAll('button')].find((button) => button.textContent.includes('Equipa'))?.click()` });
+    await sleep(700);
+  }
+  const state = await send("Runtime.evaluate", {
+    expression: `JSON.stringify({ title: document.querySelector('.page-header h1')?.textContent, cards: document.querySelectorAll('.tweak-card').length, tools: document.querySelectorAll('.internal-tool').length, avatarLoaded: Boolean(document.querySelector('.avatar img')?.complete && document.querySelector('.avatar img')?.naturalWidth), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth })`,
+    returnByValue: true,
+  });
+  const screenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+  await fs.writeFile(path.join(outputDir, `${fixture}.png`), Buffer.from(screenshot.data, "base64"));
+  console.log(`${fixture}: ${state.result.value}`);
+}
+
+socket.close();

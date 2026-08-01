@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 2,
+  "tweaks": [
+    {
+      "id": "ux.visual-effects",
+      "name": "Efeitos visuais para desempenho",
+      "description": "Desativa animacoes, sombras e transparencias do Explorer.",
+      "layer": 0,
+      "impact": "medio",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects", "name": "VisualFXSetting", "kind": "DWord", "value": 2 }
+      ]
+    },
+    {
+      "id": "ux.menu-delay",
+      "name": "Remover atraso dos menus",
+      "description": "MenuShowDelay de 400ms para 0ms.",
+      "layer": 0,
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Control Panel\\Desktop", "name": "MenuShowDelay", "kind": "String", "value": "0" }
+      ]
+    },
+    {
+      "id": "privacy.advertising-id",
+      "name": "Desativar ID de publicidade",
+      "description": "Impede apps de usarem o Advertising ID para perfilagem.",
+      "layer": 0,
+      "impact": "nenhum",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo", "name": "Enabled", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "privacy.content-delivery",
+      "name": "Desativar sugestoes e instalacoes silenciosas",
+      "description": "Impede o Windows de instalar apps promocionais e sugerir conteudo no Menu Iniciar.",
+      "layer": 0,
+      "impact": "medio",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "name": "SilentInstalledAppsEnabled", "kind": "DWord", "value": 0 },
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "name": "SubscribedContent-338388Enabled", "kind": "DWord", "value": 0 },
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "name": "SoftLandingEnabled", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "game.dvr-background",
+      "name": "Desativar gravacao em background (Game DVR)",
+      "description": "O Game DVR grava constantemente em background e custa FPS. Dos poucos tweaks com ganho medivel.",
+      "layer": 0,
+      "impact": "alto",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "System\\GameConfigStore", "name": "GameDVR_Enabled", "kind": "DWord", "value": 0 },
+        { "hive": "HKCU", "key": "System\\GameConfigStore", "name": "GameDVR_FSEBehaviorMode", "kind": "DWord", "value": 2 }
+      ]
+    },
+    {
+      "id": "game.gamebar-startup",
+      "name": "Desativar painel da Game Bar",
+      "description": "Impede a Game Bar de aparecer ao abrir jogos.",
+      "layer": 0,
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\GameBar", "name": "ShowStartupPanel", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "net.throttling-index",
+      "name": "Desativar Network Throttling",
+      "description": "O Windows limita pacotes de rede a 10 por ms fora de multimedia. Desativar reduz latencia em jogos online.",
+      "layer": 1,
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "name": "NetworkThrottlingIndex", "kind": "DWord", "value": 4294967295 }
+      ]
+    },
+    {
+      "id": "mmcss.games-priority",
+      "name": "Prioridade MMCSS para jogos",
+      "description": "Aumenta a prioridade de scheduling de CPU e GPU dada a processos de jogo.",
+      "layer": 1,
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "name": "GPU Priority", "kind": "DWord", "value": 8 },
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "name": "Priority", "kind": "DWord", "value": 6 },
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "name": "Scheduling Category", "kind": "String", "value": "High" },
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "name": "SFIO Priority", "kind": "String", "value": "High" }
+      ]
+    },
+    {
+      "id": "gpu.hags",
+      "name": "GPU Hardware-Accelerated Scheduling",
+      "description": "Deixa a GPU gerir a sua propria memoria de video. Ganho depende do setup - medir antes e depois.",
+      "layer": 1,
+      "impact": "variavel",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": { "gpuVendor": ["NVIDIA", "AMD"] },
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers", "name": "HwSchMode", "kind": "DWord", "value": 2 }
+      ]
+    },
+    {
+      "id": "power.high-performance-bias",
+      "name": "Reduzir parking de nucleos de CPU",
+      "description": "Impede o Windows de estacionar nucleos agressivamente. So para desktops - em portateis aumenta calor e pode piorar por throttling.",
+      "layer": 1,
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": false,
+      "conditions": { "chassis": ["desktop"] },
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings\\54533251-82be-4824-96c1-47b60b740d00\\0cc5b647-c1df-4637-891a-dec35c318583", "name": "Attributes", "kind": "DWord", "value": 0 }
+      ]
+    }
+  ]
+}

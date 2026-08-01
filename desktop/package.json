@@ -1,0 +1,89 @@
+{
+  "name": "orion-optimizer-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Orion Optimizer desktop client for Windows",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5174 && node electron/launch.cjs\"",
+    "typecheck": "tsc --noEmit",
+    "build:ui": "vite build",
+    "build": "npm run typecheck && npm run build:ui && electron-builder --win nsis portable",
+    "pack": "npm run typecheck && npm run build:ui && electron-builder --win --dir"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/sora": "^5.3.0",
+    "framer-motion": "^12.23.12",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.0.12",
+    "sharp": "^0.35.3",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "wait-on": "^8.0.2"
+  },
+  "build": {
+    "appId": "pt.orionoptimizer.desktop",
+    "productName": "Orion Optimizer",
+    "asar": true,
+    "protocols": [
+      {
+        "name": "Orion Optimizer",
+        "schemes": [
+          "orion-optimizer"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../client/modules",
+        "to": "engine/modules"
+      },
+      {
+        "from": "powershell",
+        "to": "engine/powershell"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Orion Optimizer"
+    }
+  }
+}

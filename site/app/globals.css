@@ -1,0 +1,173 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --neon: 139 61 255;
+    --angle: 0deg;
+
+    /* Painel e graficos: violeta da marca ajustado para leitura em fundo escuro. */
+    --panel-bg: #06080d;
+    --panel-surface: #0b0f16;
+    --panel-surface-2: #121824;
+
+    --chart-1: #9b63ea;
+    --chart-grid: #1a2130;
+    --chart-axis: #6b7a91;
+    --chart-baseline: #2a3448;
+
+    --good: #0ca30c;
+    --warning: #fab219;
+    --serious: #ec835a;
+    --critical: #d03b3b;
+  }
+
+  * {
+    @apply border-white/5;
+  }
+
+  html {
+    scroll-behavior: auto; /* Lenis controla o scroll */
+  }
+
+  body {
+    @apply bg-void text-white antialiased;
+    font-family: var(--font-sans), system-ui, sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* Cursor proprio: esconder o do sistema apenas onde ele existe. */
+  @media (hover: hover) and (pointer: fine) {
+    body.has-custom-cursor,
+    body.has-custom-cursor * {
+      cursor: none !important;
+    }
+  }
+
+  ::selection {
+    @apply bg-neon/30 text-white;
+  }
+
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-track { @apply bg-ink-950; }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-ink-600;
+    border: 2px solid #04060A;
+  }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-neon-deep; }
+}
+
+@layer components {
+  /* Vidro: a base de quase todos os paineis. */
+  .glass {
+    @apply relative rounded-2xl border border-white/[0.07] bg-white/[0.02] backdrop-blur-xl;
+  }
+
+  .glass-strong {
+    @apply relative rounded-2xl border border-white/10 bg-ink-900/70 backdrop-blur-2xl;
+  }
+
+  /* Contorno neon que roda. Precisa de @property (abaixo) para animar. */
+  .glow-border {
+    position: relative;
+    isolation: isolate;
+  }
+  .glow-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from var(--angle),
+      transparent 0%,
+      rgb(var(--neon)) 12%,
+      transparent 28%,
+      transparent 62%,
+      rgba(139, 61, 255, 0.5) 76%,
+      transparent 92%
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: -1;
+  }
+  .glow-border:hover::before,
+  .glow-border.is-active::before {
+    opacity: 1;
+    animation: border-spin 4s linear infinite;
+  }
+
+  .text-gradient {
+    @apply bg-gradient-to-b from-white via-white to-white/40 bg-clip-text text-transparent;
+  }
+
+  .text-neon-gradient {
+    @apply bg-gradient-to-r from-neon-bright via-neon to-neon-deep bg-clip-text text-transparent;
+  }
+
+  /* Cabecalho de seccao, usado em todas as seccoes. */
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-neon/20 bg-neon/[0.06]
+           px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-neon-soft;
+  }
+
+  .section {
+    @apply relative mx-auto w-full max-w-7xl px-6 py-24 md:px-10 md:py-32;
+  }
+
+  .hairline {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-neon/25 to-transparent;
+  }
+}
+
+@layer utilities {
+  .mask-fade-b {
+    -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  }
+  .mask-fade-x {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+  }
+  .perspective {
+    perspective: 1200px;
+  }
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+}
+
+/* Permite animar o angulo do gradiente conico do contorno neon.
+   Sem isto, o browser trata --angle como texto e nao interpola. */
+@property --angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes border-spin {
+  to {
+    --angle: 360deg;
+  }
+}
+
+/* Acessibilidade: quem pediu menos movimento ve o site inteiro parado,
+   sem perder conteudo. O JS le a mesma preferencia. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  body.has-custom-cursor,
+  body.has-custom-cursor * {
+    cursor: auto !important;
+  }
+}

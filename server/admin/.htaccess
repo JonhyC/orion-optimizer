@@ -1,0 +1,10 @@
+# Administracao e exclusivamente CLI. O proprio script ja recusa correr fora
+# do SAPI cli, mas negar por Apache tambem evita expor o ficheiro.
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>
