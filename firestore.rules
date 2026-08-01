@@ -1,0 +1,95 @@
+rules_version = '2';
+
+// Regras de acesso do Orion.
+//
+// O que torna isto critico: com tempo real, o BROWSER fala directamente
+// com o Firestore. Estas regras sao a unica coisa entre um cliente curioso
+// e os dados de toda a gente - nao ha segunda barreira do lado do servidor.
+//
+// Modelo:
+//  - O browser NUNCA escreve. Todas as escritas passam pelo servidor, que
+//    usa o Admin SDK e ignora estas regras por completo. Nao ha um unico
+//    `allow write` aqui, e isso e de proposito.
+//  - A identidade vem de um custom token emitido pelo servidor depois do
+//    login pelo Discord, com claims `role` e `tier`.
+//  - O uid do token e o id do utilizador em string, igual ao id do
+//    documento em /users.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return signedIn() ? request.auth.token.get('role', '') : '';
+    }
+
+    // Cargos internos: veem tudo o que o painel precisa de mostrar.
+    function isStaff() {
+      return role() in ['staff', 'developer', 'owner'];
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // --- Planos ------------------------------------------------------
+    // A pagina de precos e publica e aparece antes de haver sessao, por
+    // isso os planos activos leem-se sem autenticacao. Os inactivos sao
+    // rascunhos e so o staff os ve.
+    match /plans/{planId} {
+      allow read: if resource.data.active == true || isStaff();
+    }
+
+    // --- Utilizadores ------------------------------------------------
+    match /users/{userId} {
+      allow read: if isSelf(userId) || isStaff();
+
+      // Credenciais. Negadas a TODA a gente, incluindo ao proprio dono da
+      // conta e ao owner: o Admin SDK do servidor nao passa por aqui, e
+      // nenhuma pessoa precisa de ler um hash de password no browser.
+      match /private/{document=**} {
+        allow read: if false;
+      }
+    }
+
+    // --- Encomendas --------------------------------------------------
+    // string() em vez de int(): o user_id e numero no documento e o uid do
+    // token e string. Converter o documento para string nunca falha;
+    // converter o uid para int rebentaria se algum dia o uid deixasse de
+    // ser numerico.
+    match /orders/{orderId} {
+      allow read: if isStaff()
+                  || (signedIn() && string(resource.data.user_id) == request.auth.uid);
+    }
+
+    // --- Reviews -----------------------------------------------------
+    // As aprovadas aparecem na pagina publica. As restantes estao a
+    // aguardar moderacao e so o staff as ve.
+    match /reviews/{reviewId} {
+      allow read: if resource.data.approved == true || isStaff();
+    }
+
+    // --- Nada disto chega ao browser ---------------------------------
+    // Tokens de sessao, auditoria e tentativas de login sao dados de
+    // seguranca: o painel le-os pelo servidor, nunca em directo.
+    match /tokens/{tokenId} {
+      allow read: if false;
+    }
+    match /audit_log/{entryId} {
+      allow read: if false;
+    }
+    match /login_attempts/{attemptId} {
+      allow read: if false;
+    }
+
+    // Qualquer coleccao futura nasce fechada. Sem esta linha, uma
+    // coleccao nova criada a pressa ficaria sem regra nenhuma - e o que
+    // nao tem regra e negado, mas convem que isso esteja escrito.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

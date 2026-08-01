@@ -125,9 +125,35 @@ for (const fixture of ["basic", "pro", "ultimate", "special", "staff", "develope
   if (["staff", "developer", "owner"].includes(fixture)) {
     await send("Runtime.evaluate", { expression: `[...document.querySelectorAll('button')].find((button) => button.textContent.includes('Equipa'))?.click()` });
     await sleep(700);
+    await send("Runtime.evaluate", {
+      expression: `(async () => {
+        let opened = 0;
+        const count = document.querySelectorAll('.internal-tool').length;
+        for (let index = 0; index < count; index += 1) {
+          document.querySelectorAll('.internal-tool')[index].click();
+          await new Promise((resolve) => setTimeout(resolve, 180));
+          if (document.querySelector('.internal-tool-modal')) opened += 1;
+          document.querySelector('.internal-tool-modal .modal-close')?.click();
+          await new Promise((resolve) => setTimeout(resolve, 180));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 450));
+        document.querySelector('.presence-row')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        window.__orionModalTest = { opened, person: Boolean(document.querySelector('.person-modal')) };
+        document.querySelector('.person-modal .modal-close')?.click();
+      })()`,
+      awaitPromise: true,
+    });
+    await sleep(600);
+    await send("Runtime.evaluate", { expression: `document.querySelectorAll('.internal-tool')[document.querySelectorAll('.internal-tool').length - 1]?.click()` });
+    await sleep(450);
+    const modalScreenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+    await fs.writeFile(path.join(outputDir, `${fixture}-modal.png`), Buffer.from(modalScreenshot.data, "base64"));
+    await send("Runtime.evaluate", { expression: `document.querySelector('.internal-tool-modal .modal-close')?.click()` });
+    await sleep(300);
   }
   const state = await send("Runtime.evaluate", {
-    expression: `JSON.stringify({ title: document.querySelector('.page-header h1')?.textContent, version: document.querySelector('.app-version')?.textContent, cards: document.querySelectorAll('.tweak-card').length, tools: document.querySelectorAll('.internal-tool').length, capabilities: document.querySelectorAll('.capability-row').length, operationMetrics: document.querySelectorAll('.operation-metric').length, people: document.querySelectorAll('.presence-row').length, activity: document.querySelectorAll('.activity-entry').length, hasStandard: document.body.textContent.includes('Standard'), avatarLoaded: Boolean(document.querySelector('.avatar img')?.complete && document.querySelector('.avatar img')?.naturalWidth), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth })`,
+    expression: `JSON.stringify({ title: document.querySelector('.page-header h1')?.textContent, version: document.querySelector('.app-version')?.textContent, cards: document.querySelectorAll('.tweak-card').length, tools: document.querySelectorAll('.internal-tool').length, testedToolModals: window.__orionModalTest?.opened ?? 0, personModal: window.__orionModalTest?.person ?? false, capabilities: document.querySelectorAll('.capability-row').length, operationMetrics: document.querySelectorAll('.operation-metric').length, people: document.querySelectorAll('.presence-row').length, activity: document.querySelectorAll('.activity-entry').length, hasStandard: document.body.textContent.includes('Standard'), avatarLoaded: Boolean(document.querySelector('.avatar img')?.complete && document.querySelector('.avatar img')?.naturalWidth), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth })`,
     returnByValue: true,
   });
   const screenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });

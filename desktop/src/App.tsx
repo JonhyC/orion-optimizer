@@ -567,6 +567,7 @@ function HistoryView({ notify }: { notify: (toast: { tone: "good" | "bad"; messa
 }
 
 type InternalTool = {
+  kind: "account" | "dashboard" | "users" | "reviews" | "catalog" | "plans" | "orders";
   label: string;
   description: string;
   path: string;
@@ -575,13 +576,13 @@ type InternalTool = {
 };
 
 const INTERNAL_TOOLS: InternalTool[] = [
-  { label: "Área pessoal", description: "Consultar licença, suporte e dispositivo", path: "/panel", icon: <UserRound />, minimumRole: "staff" },
-  { label: "Painel", description: "Métricas e estado da operação Orion", path: "/panel/admin", icon: <Gauge />, minimumRole: "staff" },
-  { label: "Contas", description: "Consultar utilizadores e prestar suporte", path: "/panel/admin/users", icon: <Users />, minimumRole: "staff" },
-  { label: "Avaliações", description: "Moderar avaliações submetidas", path: "/panel/admin/reviews", icon: <ShieldCheck />, minimumRole: "staff" },
-  { label: "Catálogo", description: "Gerir otimizações autorizadas", path: "/panel/admin/catalog", icon: <PackageCheck />, minimumRole: "developer" },
-  { label: "Planos", description: "Criar e editar planos comerciais", path: "/panel/admin/plans", icon: <Crown />, minimumRole: "owner" },
-  { label: "Vendas", description: "Consultar compras e faturação", path: "/panel/admin/orders", icon: <ShoppingBag />, minimumRole: "owner" },
+  { kind: "account", label: "Área pessoal", description: "Consultar licença, suporte e dispositivo", path: "/panel", icon: <UserRound />, minimumRole: "staff" },
+  { kind: "dashboard", label: "Painel", description: "Métricas e estado da operação Orion", path: "/panel/admin", icon: <Gauge />, minimumRole: "staff" },
+  { kind: "users", label: "Contas", description: "Consultar utilizadores e prestar suporte", path: "/panel/admin/users", icon: <Users />, minimumRole: "staff" },
+  { kind: "reviews", label: "Avaliações", description: "Moderar avaliações submetidas", path: "/panel/admin/reviews", icon: <ShieldCheck />, minimumRole: "staff" },
+  { kind: "catalog", label: "Catálogo", description: "Gerir otimizações autorizadas", path: "/panel/admin/catalog", icon: <PackageCheck />, minimumRole: "developer" },
+  { kind: "plans", label: "Planos", description: "Criar e editar planos comerciais", path: "/panel/admin/plans", icon: <Crown />, minimumRole: "owner" },
+  { kind: "orders", label: "Vendas", description: "Consultar compras e faturação", path: "/panel/admin/orders", icon: <ShoppingBag />, minimumRole: "owner" },
 ];
 
 const INTERNAL_ROLE_RANK = { staff: 1, developer: 2, owner: 3 } as const;
@@ -605,6 +606,8 @@ function InternalView({ state, profile, settings, notify }: { state: CatalogStat
   const [operationsLoading, setOperationsLoading] = useState(true);
   const [operationsError, setOperationsError] = useState("");
   const [peopleSearch, setPeopleSearch] = useState("");
+  const [selectedTool, setSelectedTool] = useState<InternalTool | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<InternalOverview["people"][number] | null>(null);
 
   async function loadOperations(silent = false) {
     if (!silent) setOperationsLoading(true);
@@ -687,7 +690,7 @@ function InternalView({ state, profile, settings, notify }: { state: CatalogStat
                 <div className="presence-list">
                   {visiblePeople.length === 0 ? <span className="operations-empty">Sem utilizadores correspondentes.</span> : visiblePeople.map((person) => {
                     const content = <><span className="presence-avatar">{person.avatarUrl ? <img src={person.avatarUrl} alt="" /> : <UserRound size={15} />}</span><span className="presence-identity"><strong>{person.displayName}</strong><small>{ROLE_LABEL[person.role] ?? person.role} · {person.tier ? tierLabel(person.tier) : "sem plano"} · {person.clientVersion ?? "sem versão"}</small></span><span className="presence-signals"><span className={person.siteOnline ? "online" : ""}><Wifi size={11} />Site</span><span className={person.optimizerOnline ? "online" : ""}><Zap size={11} />App</span><small>{relativeTime(Math.max(person.siteSeenAt ?? 0, person.optimizerSeenAt ?? 0, person.lastActivityAt ?? 0) || null)}</small></span></>;
-                    return role === "owner" ? <button key={person.id} className="presence-row" onClick={() => void open(`/panel/admin/users/${person.id}`)} title="Abrir perfil completo">{content}<ExternalLink size={13} /></button> : <div key={person.id} className="presence-row">{content}</div>;
+                    return <button key={person.id} className="presence-row" onClick={() => setSelectedPerson(person)} title="Ver detalhes na aplicação">{content}<ChevronRight size={13} /></button>;
                   })}
                 </div>
               </section>
@@ -717,10 +720,10 @@ function InternalView({ state, profile, settings, notify }: { state: CatalogStat
       <div className="section-heading"><div><span className="eyebrow">FERRAMENTAS</span><h2>Atalhos da equipa</h2></div><span>{tools.length} disponíveis</span></div>
       <div className="internal-tools">
         {tools.map((tool) => (
-          <button key={tool.path} className="internal-tool" onClick={() => void open(tool.path)}>
+          <button key={tool.path} className="internal-tool" onClick={() => setSelectedTool(tool)}>
             <span className="internal-tool-icon">{tool.icon}</span>
             <span><strong>{tool.label}</strong><small>{tool.description}</small></span>
-            <ExternalLink size={15} />
+            <ChevronRight size={15} />
           </button>
         ))}
       </div>
@@ -743,8 +746,214 @@ function InternalView({ state, profile, settings, notify }: { state: CatalogStat
           {TIER_ACCESS.map((item) => <div key={item.tier}><b>{item.tier}</b><strong>{item.count}/10</strong><span>{item.detail}</span></div>)}
         </div>
       </section>
+
+      <AnimatePresence>
+        {selectedTool && (
+          <InternalToolModal
+            tool={selectedTool}
+            account={account}
+            overview={overview}
+            state={state}
+            profile={profile}
+            settings={settings}
+            onClose={() => setSelectedTool(null)}
+            onOpenPortal={(path) => void open(path)}
+            onSelectPerson={(person) => {
+              setSelectedTool(null);
+              setSelectedPerson(person);
+            }}
+          />
+        )}
+        {selectedPerson && (
+          <PersonModal
+            person={selectedPerson}
+            canOpenPortal={role === "owner"}
+            onClose={() => setSelectedPerson(null)}
+            onOpenPortal={(path) => void open(path)}
+          />
+        )}
+      </AnimatePresence>
     </PageMotion>
   );
+}
+
+function InternalToolModal({ tool, account, overview, state, profile, settings, onClose, onOpenPortal, onSelectPerson }: {
+  tool: InternalTool;
+  account: OrionAccount;
+  overview: InternalOverview | null;
+  state: CatalogState;
+  profile: SystemProfile | null;
+  settings: LoginSettings;
+  onClose: () => void;
+  onOpenPortal: (path: string) => void;
+  onSelectPerson: (person: InternalOverview["people"][number]) => void;
+}) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  const recentReviews = overview?.activity.filter((entry) => entry.action.startsWith("review_")) ?? [];
+  const recentOrders = overview?.activity.filter((entry) => entry.action.includes("order") || entry.action.includes("refund")) ?? [];
+
+  return (
+    <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <motion.section className="modal internal-tool-modal" initial={{ opacity: 0, y: 18, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: .98 }}>
+        <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
+        <div className="internal-modal-heading">
+          <span className="internal-tool-icon">{tool.icon}</span>
+          <div><span className="eyebrow">CENTRO INTERNO</span><h2>{tool.label}</h2><p>{tool.description}</p></div>
+        </div>
+
+        {tool.kind === "account" && (
+          <div className="internal-modal-body">
+            <div className="internal-modal-stats">
+              <ModalStat label="Cargo" value={ROLE_LABEL[account.role]} />
+              <ModalStat label="Plano" value={tierLabel(account.tier ?? "orion")} />
+              <ModalStat label="Licença" value={formatExpiry(account.expires_at)} />
+              <ModalStat label="Suporte" value={account.support_lifetime ? "Life-time" : formatExpiry(account.support_expires_at)} />
+            </div>
+            <div className="internal-detail-list">
+              <InfoLine label="Discord" value={account.discord_verified ? "Conta verificada" : "Por verificar"} />
+              <InfoLine label="Utilizador" value={account.display_name || account.username} />
+              <InfoLine label="Computador" value={profile ? `${profile.chassis} · ${profile.ramGB} GB RAM · ${profile.gpuVendor}` : "A detetar"} />
+              <InfoLine label="Execução" value={profile?.executionMode === "Real" ? "Modo real" : "Simulação"} />
+              <InfoLine label="Servidor" value={settings.server.replace(/^https?:\/\//, "")} />
+            </div>
+          </div>
+        )}
+
+        {tool.kind === "dashboard" && (
+          <div className="internal-modal-body">
+            <div className="internal-modal-stats">
+              <ModalStat label="Online no site" value={String(overview?.metrics.onlineSite ?? 0)} />
+              <ModalStat label="Online na app" value={String(overview?.metrics.onlineOptimizer ?? 0)} />
+              <ModalStat label="Licenças ativas" value={String(overview?.metrics.activeLicenses ?? 0)} />
+              <ModalStat label="Ações · 24h" value={String(overview?.metrics.optimizerActions24h ?? 0)} />
+            </div>
+            <ModalActivity entries={overview?.activity.slice(0, 8) ?? []} empty="Sem atividade recente." />
+          </div>
+        )}
+
+        {tool.kind === "users" && (
+          <div className="internal-modal-body">
+            <div className="internal-modal-stats">
+              <ModalStat label="Utilizadores" value={String(overview?.metrics.users ?? 0)} />
+              <ModalStat label="Licenças ativas" value={String(overview?.metrics.activeLicenses ?? 0)} />
+              <ModalStat label="Online no site" value={String(overview?.metrics.onlineSite ?? 0)} />
+              <ModalStat label="Online na app" value={String(overview?.metrics.onlineOptimizer ?? 0)} />
+            </div>
+            <div className="internal-modal-list">
+              {(overview?.people ?? []).map((person) => (
+                <button key={person.id} className="internal-modal-person" onClick={() => onSelectPerson(person)}>
+                  <span className="presence-avatar">{person.avatarUrl ? <img src={person.avatarUrl} alt="" /> : <UserRound size={15} />}</span>
+                  <span><strong>{person.displayName}</strong><small>{ROLE_LABEL[person.role] ?? person.role} · {person.tier ? tierLabel(person.tier) : "sem plano"}</small></span>
+                  <span className={person.optimizerOnline || person.siteOnline ? "status-online" : ""}>{person.optimizerOnline || person.siteOnline ? "Online" : relativeTime(person.lastActivityAt)}</span>
+                  <ChevronRight size={14} />
+                </button>
+              ))}
+              {!overview?.people.length && <div className="internal-modal-empty">Sem utilizadores disponíveis.</div>}
+            </div>
+          </div>
+        )}
+
+        {tool.kind === "reviews" && (
+          <div className="internal-modal-body">
+            <div className="internal-modal-stats">
+              <ModalStat label="Moderações recentes" value={String(recentReviews.length)} />
+              <ModalStat label="Staff online" value={String(overview?.people.filter((person) => person.siteOnline && INTERNAL_ROLES.has(person.role)).length ?? 0)} />
+            </div>
+            <ModalActivity entries={recentReviews} empty="Sem avaliações moderadas na atividade recente." />
+          </div>
+        )}
+
+        {tool.kind === "catalog" && (
+          <div className="internal-modal-body">
+            <div className="internal-modal-stats">
+              <ModalStat label="Otimizações" value={String(state.tweaks.length)} />
+              <ModalStat label="Compatíveis" value={String(state.tweaks.filter((tweak) => state.eligibility[tweak.id]?.eligible).length)} />
+              <ModalStat label="Pedidos · 24h" value={String(overview?.metrics.catalogRequests24h ?? 0)} />
+            </div>
+            <div className="internal-modal-list">
+              {state.tweaks.map((tweak) => <div className="catalog-modal-row" key={tweak.id}><span className="internal-tool-icon">{CATEGORY[categoryOf(tweak)] ? (() => { const Icon = CATEGORY[categoryOf(tweak)].icon; return <Icon />; })() : <Zap />}</span><span><strong>{tweak.name}</strong><small>{tweak.id} · camada {tweak.layer}</small></span><b className={state.eligibility[tweak.id]?.eligible ? "status-online" : ""}>{state.eligibility[tweak.id]?.eligible ? "Compatível" : "Bloqueada"}</b></div>)}
+            </div>
+          </div>
+        )}
+
+        {tool.kind === "plans" && (
+          <div className="internal-modal-body">
+            <div className="plan-modal-list">{TIER_ACCESS.map((plan) => <div key={plan.tier}><span><strong>{plan.tier}</strong><small>{plan.detail}</small></span><b>{plan.count}/10</b></div>)}</div>
+          </div>
+        )}
+
+        {tool.kind === "orders" && (
+          <div className="internal-modal-body">
+            <div className="internal-modal-stats">
+              <ModalStat label="Receita · 30 dias" value={overview?.metrics.revenue30Cents === null || overview?.metrics.revenue30Cents === undefined ? "Indisponível" : money(overview.metrics.revenue30Cents)} />
+              <ModalStat label="Eventos recentes" value={String(recentOrders.length)} />
+            </div>
+            <ModalActivity entries={recentOrders} empty="Sem movimentos comerciais na atividade recente." />
+          </div>
+        )}
+
+        <div className="modal-actions internal-modal-actions">
+          <button className="secondary" onClick={onClose}>Fechar</button>
+          <button className="primary" onClick={() => onOpenPortal(tool.path)}><ExternalLink size={14} />Abrir gestão avançada</button>
+        </div>
+      </motion.section>
+    </motion.div>
+  );
+}
+
+function PersonModal({ person, canOpenPortal, onClose, onOpenPortal }: {
+  person: InternalOverview["people"][number];
+  canOpenPortal: boolean;
+  onClose: () => void;
+  onOpenPortal: (path: string) => void;
+}) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <motion.section className="modal person-modal" initial={{ opacity: 0, y: 18, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: .98 }}>
+        <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
+        <div className="person-modal-heading">
+          <span className="person-modal-avatar">{person.avatarUrl ? <img src={person.avatarUrl} alt="" /> : <UserRound size={24} />}</span>
+          <div><span className="eyebrow">UTILIZADOR</span><h2>{person.displayName}</h2><p>@{person.username}</p></div>
+          <span className={`person-live-state ${person.siteOnline || person.optimizerOnline ? "online" : ""}`}>{person.siteOnline || person.optimizerOnline ? "Online" : "Offline"}</span>
+        </div>
+        <div className="internal-modal-stats person-modal-stats">
+          <ModalStat label="Cargo" value={ROLE_LABEL[person.role] ?? person.role} />
+          <ModalStat label="Plano" value={person.tier ? tierLabel(person.tier) : "Sem plano"} />
+          <ModalStat label="Estado" value={person.status === "active" ? "Ativa" : person.status} />
+          <ModalStat label="Versão" value={person.clientVersion ?? "Sem versão"} />
+        </div>
+        <div className="internal-detail-list">
+          <InfoLine label="Site" value={person.siteOnline ? "Online agora" : relativeTime(person.siteSeenAt)} />
+          <InfoLine label="Optimizer" value={person.optimizerOnline ? "Online agora" : relativeTime(person.optimizerSeenAt)} />
+          <InfoLine label="Última atividade" value={relativeTime(person.lastActivityAt)} />
+        </div>
+        <div className="modal-actions"><button className="secondary" onClick={onClose}>Fechar</button>{canOpenPortal && <button className="primary" onClick={() => onOpenPortal(`/panel/admin/users/${person.id}`)}><ExternalLink size={14} />Gestão completa</button>}</div>
+      </motion.section>
+    </motion.div>
+  );
+}
+
+function ModalStat({ label, value }: { label: string; value: string }) {
+  return <div><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function InfoLine({ label, value }: { label: string; value: string }) {
+  return <div><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function ModalActivity({ entries, empty }: { entries: InternalOverview["activity"]; empty: string }) {
+  return <div className="internal-modal-activity">{entries.length ? entries.map((entry) => <div key={entry.id}><span className="activity-marker" /><span><strong>{ACTIVITY_LABELS[entry.action] ?? entry.action.replaceAll("_", " ")}</strong><small>{entry.username}{entry.detail ? ` · ${entry.detail}` : ""}</small></span><time>{relativeTime(entry.createdAt)}</time></div>) : <div className="internal-modal-empty">{empty}</div>}</div>;
 }
 
 function OperationMetric({ label, value, detail, tone = "default" }: { label: string; value: string; detail: string; tone?: "default" | "good" | "warn" }) {
