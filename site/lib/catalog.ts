@@ -1,5 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  groupTweaksByTier,
+  isTweakEnabled,
+  type OptimizerTier,
+} from "./optimizer-access.ts";
 
 /**
  * Leitura e escrita do catalogo de tweaks.
@@ -30,11 +35,33 @@ export type TweakConditions = {
   gpuType?: GpuType[];
 };
 
+/**
+ * Plano minimo que da direito ao tweak.
+ *
+ * Eixo separado da `layer`: a camada diz se e precisa elevacao no Windows,
+ * o tier diz o que o cliente comprou. Um tweak pode correr sem admin e
+ * mesmo assim ser exclusivo do Pro - o caso do desligar da aceleracao do
+ * rato, que e HKCU mas so interessa a quem joga.
+ */
+export const TWEAK_TIERS = ["basic", "pro", "ultimate", "special"] as const;
+export type TweakTier = (typeof TWEAK_TIERS)[number];
+
 export type Tweak = {
   id: string;
   name: string;
   description: string;
   layer: 0 | 1;
+  /**
+   * Ausente = nivel herdado do prefixo do id (regra antiga, ver
+   * optimizer-access.ts). Catalogos novos devem preencher sempre.
+   */
+  tier?: TweakTier;
+  /**
+   * Ausente ou true = servido aos clientes. False retira de circulacao sem
+   * perder a definicao - o que apagar faria. Serve para suspender um tweak
+   * suspeito de dar problemas sem ter de o reescrever depois.
+   */
+  enabled?: boolean;
   impact: string;
   risk: string;
   requiresReboot: boolean;
@@ -88,6 +115,10 @@ export function validateTweak(t: Partial<Tweak>, existingIds: string[]): Validat
   if (!t.description?.trim()) return { ok: false, error: "Falta a descricao." };
   if (t.layer !== 0 && t.layer !== 1) return { ok: false, error: "A camada tem de ser 0 ou 1." };
   if (!t.actions?.length) return { ok: false, error: "Um tweak sem alteracoes nao faz nada." };
+
+  if (t.tier !== undefined && !TWEAK_TIERS.includes(t.tier)) {
+    return { ok: false, error: `Nivel invalido: ${t.tier}. So ${TWEAK_TIERS.join(", ")}.` };
+  }
 
   if (t.conditions?.gpuVendor?.some((vendor) => !GPU_VENDORS.includes(vendor))) {
     return { ok: false, error: "O fabricante da GPU nao e valido." };
@@ -158,6 +189,41 @@ export function writeCatalog(tweaks: Tweak[]): void {
   const tmp = `${CATALOG_PATH}.tmp`;
   fs.writeFileSync(tmp, payload, "utf8");
   fs.renameSync(tmp, CATALOG_PATH);
+}
+
+export type CatalogStats = {
+  total: number;
+  suspended: number;
+  byTier: Array<{ tier: OptimizerTier; count: number }>;
+  distinctValues: number;
+  /** Valores de registry escritos por mais do que um tweak activo. */
+  conflicts: number;
+};
+
+/**
+ * Resumo do catalogo para o painel de administracao. Corre no servidor a
+ * cada carregamento: o catalogo tem dezenas de entradas, nao milhares, e
+ * assim nunca mostra numeros em cache que ja nao correspondem ao ficheiro.
+ */
+export function catalogStats(): CatalogStats {
+  const { tweaks } = readCatalog();
+  const live = tweaks.filter(isTweakEnabled);
+
+  const seen = new Map<string, Set<string>>();
+  for (const t of live) {
+    for (const a of t.actions) {
+      const key = `${a.hive}\\${a.key}\\${a.name}`.toLocaleLowerCase("pt");
+      seen.set(key, (seen.get(key) ?? new Set()).add(t.id));
+    }
+  }
+
+  return {
+    total: tweaks.length,
+    suspended: tweaks.length - live.length,
+    byTier: groupTweaksByTier(live).map((g) => ({ tier: g.tier, count: g.tweaks.length })),
+    distinctValues: seen.size,
+    conflicts: [...seen.values()].filter((ids) => ids.size > 1).length,
+  };
 }
 
 /** Descreve as barreiras, para a interface as poder mostrar. */

@@ -4,6 +4,9 @@ import AreaChart from "@/components/panel/AreaChart";
 import { BarList, Card, StatTile, StatusBadge, TableView } from "@/components/panel/Pieces";
 import { discordConfig } from "@/lib/discord";
 import { getDb } from "@/lib/db";
+import { catalogStats } from "@/lib/catalog";
+import { TIER_LABELS } from "@/lib/optimizer-access";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +25,7 @@ export default async function AdminPage() {
   const signups = dailySeries("signups", 30);
   const plans = revenueByPlan();
   const orders = recentOrders(8);
+  const cat = catalogStats();
 
   return (
     <>
@@ -91,6 +95,47 @@ export default async function AdminPage() {
             headers={["Dia", "Novos"]}
             rows={signups.filter((p) => p.value > 0).map((p) => [p.label, p.value])}
           />
+        </Card>
+      </div>
+
+      <div className="mt-5">
+        <Card
+          title="Catalogo de optimizacoes"
+          subtitle={`${cat.total} tweaks · ${cat.distinctValues} valores de registry`}
+        >
+          <BarList
+            rows={cat.byTier.map((t) => ({
+              label: TIER_LABELS[t.tier],
+              value: t.count,
+              display: String(t.count),
+              note: "servidas a este plano e acima",
+            }))}
+            empty="O catalogo esta vazio."
+          />
+
+          {(cat.suspended > 0 || cat.conflicts > 0) && (
+            <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 text-[12.5px]">
+              {cat.suspended > 0 && (
+                <p className="text-[var(--warning)]">
+                  {cat.suspended} suspenso{cat.suspended === 1 ? "" : "s"} — nao
+                  {cat.suspended === 1 ? " e servido" : " sao servidos"} a ninguem.
+                </p>
+              )}
+              {cat.conflicts > 0 && (
+                <p className="text-[var(--warning)]">
+                  {cat.conflicts} valor{cat.conflicts === 1 ? "" : "es"} escrito
+                  {cat.conflicts === 1 ? "" : "s"} por mais do que um tweak.
+                </p>
+              )}
+            </div>
+          )}
+
+          <Link
+            href="/panel/admin/catalog"
+            className="mt-4 inline-block text-[12.5px] text-[var(--chart-1)] hover:underline"
+          >
+            Abrir catalogo →
+          </Link>
         </Card>
       </div>
 

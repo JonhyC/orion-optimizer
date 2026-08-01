@@ -5,8 +5,10 @@ import { nowSeconds, NO_PASSWORD } from "@/lib/db";
 import { Card, StatusBadge } from "@/components/panel/Pieces";
 import ClientPassword from "./ClientPassword";
 import MachineBinding from "./MachineBinding";
+import OptimizerActions from "./OptimizerActions";
 import { DISCORD_URL } from "@/lib/data";
-import { Download, ExternalLink, MonitorCog, ShieldCheck } from "lucide-react";
+import { optimizerRelease } from "@/lib/optimizer-release";
+import { MonitorCog, ShieldCheck } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,7 @@ const TIER_LABEL: Record<string, string> = {
 
 export default async function AccountPage() {
   const user = await requireUser();
+  const release = optimizerRelease();
 
   const now = nowSeconds();
 
@@ -215,23 +218,7 @@ export default async function AccountPage() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5">
-                <a
-                  href="orion-optimizer://open"
-                  className="inline-flex items-center gap-2 rounded-lg bg-[var(--chart-1)] px-4 py-2.5 text-[13px] font-semibold text-[#16082c] transition-opacity hover:opacity-90"
-                >
-                  <ExternalLink size={15} />
-                  Abrir Optimizer
-                </a>
-                <a
-                  href="/downloads/Orion-Optimizer-Setup.exe"
-                  download
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[var(--panel-surface-2)] px-4 py-2.5 text-[13px] font-semibold text-white/70 transition-colors hover:border-[var(--chart-1)]/50 hover:text-white"
-                >
-                  <Download size={15} />
-                  Descarregar
-                </a>
-              </div>
+              <OptimizerActions installedVersion={user.client_version} release={release} />
             </div>
 
             <div className="mt-5 border-t border-white/[0.06] pt-5">

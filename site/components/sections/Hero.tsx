@@ -69,9 +69,9 @@ export default function Hero() {
           </span>
         </motion.div>
 
-        <h1 className="mt-8 max-w-5xl font-display text-[13vw] font-extrabold leading-[0.88] tracking-[-0.03em] sm:text-[9vw] lg:text-[86px]">
+        <h1 className="mt-8 max-w-5xl font-display text-[34px] font-extrabold leading-[0.92] tracking-normal min-[370px]:text-[40px] sm:text-[64px] lg:text-[86px]">
           {TITLE.map((word, i) => (
-            <span key={word} className="mr-[0.22em] inline-block overflow-hidden align-bottom">
+            <span key={word} className="mr-[0.22em] inline-block max-w-full overflow-hidden align-bottom last:mr-0">
               <motion.span
                 className={`inline-block ${
                   word === "PERFORMANCE" ? "text-neon-gradient" : "text-gradient"

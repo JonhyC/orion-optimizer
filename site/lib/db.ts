@@ -1,6 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import path from "node:path";
-import fs from "node:fs";
+import { databasePath, ensureDatabaseDirectory } from "./storage-paths.ts";
 
 /**
  * Base de dados: um ficheiro SQLite, sem servidor.
@@ -9,27 +8,30 @@ import fs from "node:fs";
  * sem compilacao, sem node-gyp. Substitui o PDO/PHP que existia antes.
  */
 
-const DB_PATH =
-  process.env.ORION_DB_PATH ??
-  path.join(process.cwd(), "..", "data", "orion.sqlite");
-
 /** Caminho absoluto do ficheiro, para o comando `admin.ts db` o mostrar. */
-export const DB_FILE = path.resolve(DB_PATH);
+export const DB_FILE = databasePath;
 
 let db: DatabaseSync | null = null;
 
 export function getDb(): DatabaseSync {
   if (db) return db;
 
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-
-  db = new DatabaseSync(DB_PATH);
-  db.exec("PRAGMA journal_mode = WAL");
-  db.exec("PRAGMA foreign_keys = ON");
-  migrate(db);
-  seedPlans(db);
-
-  return db;
+  let connection: DatabaseSync | null = null;
+  try {
+    ensureDatabaseDirectory();
+    connection = new DatabaseSync(databasePath);
+    connection.exec("PRAGMA journal_mode = WAL");
+    connection.exec("PRAGMA foreign_keys = ON");
+    migrate(connection);
+    seedPlans(connection);
+    db = connection;
+    return db;
+  } catch (error) {
+    connection?.close();
+    const code = (error as NodeJS.ErrnoException).code ?? error?.constructor?.name ?? "unknown";
+    console.error(`[orion] database initialization failed (${code})`);
+    throw new Error("Nao foi possivel inicializar a base de dados Orion.");
+  }
 }
 
 function migrate(d: DatabaseSync): void {
@@ -153,11 +155,53 @@ function migrate(d: DatabaseSync): void {
   addColumn(d, "plans", "compare_at_cents", "INTEGER");
   addColumn(d, "plans", "discount_active", "INTEGER NOT NULL DEFAULT 0");
   addColumn(d, "plans", "promo_text", "TEXT");
+  const addedPlanFeatures = addColumn(d, "plans", "features_json", "TEXT");
+  addColumn(d, "plans", "cta_text", "TEXT");
   if (addedBadgeText) {
     d.prepare("UPDATE plans SET badge_text = ?, badge_active = 1 WHERE code = ?")
       .run("Most Popular", "pro");
     d.prepare("UPDATE plans SET badge_text = ?, badge_active = 1 WHERE code = ?")
       .run("Maximum Performance", "ultimate");
+  }
+  if (addedPlanFeatures) {
+    const defaultFeatures: Record<string, string[]> = {
+      basic: [
+        "Startup & background cleanup",
+        "Windows debloat pass",
+        "Power plan tuning",
+        "System restore point first",
+        "Full rollback included",
+      ],
+      pro: [
+        "Everything in Basic",
+        "CPU scheduling & core parking",
+        "GPU driver-level tuning",
+        "Network latency pass",
+        "Per-game profile setup",
+      ],
+      ultimate: [
+        "Everything in Pro",
+        "Full 1-on-1 remote session",
+        "Frame-time analysis with PresentMon",
+        "Before / after benchmark report",
+        "Peripheral & monitor calibration",
+        "Free re-optimization after upgrades",
+      ],
+    };
+    const plans = d.prepare("SELECT id, code, name FROM plans").all() as Array<{
+      id: number;
+      code: string;
+      name: string;
+    }>;
+    const update = d.prepare("UPDATE plans SET features_json = ?, cta_text = ? WHERE id = ?");
+    for (const plan of plans) {
+      const features = defaultFeatures[plan.code] ?? [
+        "Orion Optimizer access",
+        "System restore point first",
+        "Full rollback included",
+      ];
+      update.run(JSON.stringify(features), `Get ${plan.name}`, plan.id);
+    }
   }
   // NULL = sem suporte, 0 = life-time, > 0 = numero de dias.
   addColumn(d, "plans", "support_days", "INTEGER");
@@ -175,6 +219,8 @@ function migrate(d: DatabaseSync): void {
   addColumn(d, "users", "support_started_at", "INTEGER");
   addColumn(d, "users", "support_expires_at", "INTEGER");
   addColumn(d, "users", "support_lifetime", "INTEGER NOT NULL DEFAULT 0");
+  addColumn(d, "users", "client_version", "TEXT");
+  addColumn(d, "users", "client_seen_at", "INTEGER");
 
   d.exec(`
     CREATE TABLE IF NOT EXISTS discord_role_sync (
@@ -209,21 +255,52 @@ function seedPlans(d: DatabaseSync): void {
   // days = 0 significa PERMANENTE (expires_at fica a NULL). Nao e "zero dias":
   // e a ausencia de prazo. Planos privados ou especiais sao criados pelo owner
   // no painel e nao sao inseridos automaticamente aqui.
-  const rows: Array<[string, string, string, number, number, number | null, number, number, string | null]> = [
-    ["basic", "Basic", "The essentials, done properly.", 1499, 30, null, 1, 1, process.env.DISCORD_TIER_BASIC ?? null],
-    ["pro", "Pro", "Where most players land.", 2999, 365, 30, 1, 2, process.env.DISCORD_TIER_PRO ?? null],
-    ["ultimate", "Ultimate", "Every millisecond, hunted down.", 4999, 36500, 0, 1, 3, process.env.DISCORD_TIER_ULTIMATE ?? null],
+  const rows: Array<[string, string, string, number, number, number | null, number, number, string | null, string[]]> = [
+    ["basic", "Basic", "The essentials, done properly.", 1499, 30, null, 1, 1, process.env.DISCORD_TIER_BASIC ?? null, [
+      "Startup & background cleanup",
+      "Windows debloat pass",
+      "Power plan tuning",
+      "System restore point first",
+      "Full rollback included",
+    ]],
+    ["pro", "Pro", "Where most players land.", 2999, 365, 30, 1, 2, process.env.DISCORD_TIER_PRO ?? null, [
+      "Everything in Basic",
+      "CPU scheduling & core parking",
+      "GPU driver-level tuning",
+      "Network latency pass",
+      "Per-game profile setup",
+    ]],
+    ["ultimate", "Ultimate", "Every millisecond, hunted down.", 4999, 36500, 0, 1, 3, process.env.DISCORD_TIER_ULTIMATE ?? null, [
+      "Everything in Pro",
+      "Full 1-on-1 remote session",
+      "Frame-time analysis with PresentMon",
+      "Before / after benchmark report",
+      "Peripheral & monitor calibration",
+      "Free re-optimization after upgrades",
+    ]],
   ];
 
   const exists = d.prepare("SELECT id FROM plans WHERE code = ?");
   const insert = d.prepare(
-    `INSERT INTO plans (code, name, description, price_cents, currency, days, support_days, active, sort_order, discord_role_id)
-     VALUES (?, ?, ?, ?, 'EUR', ?, ?, ?, ?, ?)`,
+    `INSERT INTO plans (code, name, description, price_cents, currency, days, support_days, active, sort_order, discord_role_id, features_json, cta_text)
+     VALUES (?, ?, ?, ?, 'EUR', ?, ?, ?, ?, ?, ?, ?)`,
   );
 
-  for (const [code, name, description, price, days, supportDays, active, sort, discordRoleId] of rows) {
+  for (const [code, name, description, price, days, supportDays, active, sort, discordRoleId, features] of rows) {
     if (!exists.get(code)) {
-      insert.run(code, name, description, price, days, supportDays, active, sort, discordRoleId);
+      insert.run(
+        code,
+        name,
+        description,
+        price,
+        days,
+        supportDays,
+        active,
+        sort,
+        discordRoleId,
+        JSON.stringify(features),
+        `Get ${name}`,
+      );
     }
   }
 }
@@ -263,6 +340,8 @@ export type User = {
   support_started_at: number | null;
   support_expires_at: number | null;
   support_lifetime: number;
+  client_version: string | null;
+  client_seen_at: number | null;
 };
 
 /** Marcador para contas criadas por Discord, que ainda nao tem password. */

@@ -517,6 +517,22 @@ function planMarketing(formData: FormData, priceCents: number) {
   };
 }
 
+function planPublicContent(formData: FormData) {
+  const features = String(formData.get("features") ?? "")
+    .split(/\r?\n/)
+    .map((feature) => feature.trim())
+    .filter(Boolean)
+    .slice(0, 12)
+    .map((feature) => feature.slice(0, 100));
+  const ctaText = String(formData.get("ctaText") ?? "").trim().slice(0, 32);
+
+  return {
+    valid: features.length > 0 && Boolean(ctaText),
+    featuresJson: JSON.stringify(features),
+    ctaText,
+  };
+}
+
 async function isAssignableDiscordRole(roleId: string): Promise<boolean> {
   try {
     return (await fetchDiscordGuildRoles()).some(
@@ -577,6 +593,7 @@ export async function updatePlanAction(formData: FormData) {
   const priceEuros = Number(String(formData.get("price")).replace(",", "."));
   const priceCents = Math.round(priceEuros * 100);
   const marketing = planMarketing(formData, priceCents);
+  const publicContent = planPublicContent(formData);
   const days = planDays(formData);
   const supportDays = planSupportDays(formData);
   const discordRoleId = planDiscordRoleId(formData);
@@ -589,6 +606,7 @@ export async function updatePlanAction(formData: FormData) {
     !Number.isFinite(priceEuros) ||
     priceEuros < 0 ||
     !marketing.valid ||
+    !publicContent.valid ||
     !Number.isFinite(days) ||
     days < 0 ||
     (supportDays !== null && (!Number.isFinite(supportDays) || supportDays < 0)) ||
@@ -625,7 +643,7 @@ export async function updatePlanAction(formData: FormData) {
     .prepare(
       `UPDATE plans
        SET code = ?, name = ?, description = ?, price_cents = ?, days = ?, support_days = ?, active = ?, sort_order = ?, cover_url = ?, discord_role_id = ?,
-           badge_text = ?, badge_active = ?, compare_at_cents = ?, discount_active = ?, promo_text = ?
+           badge_text = ?, badge_active = ?, compare_at_cents = ?, discount_active = ?, promo_text = ?, features_json = ?, cta_text = ?
        WHERE id = ?`,
     )
     .run(
@@ -644,6 +662,8 @@ export async function updatePlanAction(formData: FormData) {
       marketing.compareAtCents,
       marketing.discountActive,
       marketing.promoText,
+      publicContent.featuresJson,
+      publicContent.ctaText,
       planId,
     );
 
@@ -687,6 +707,7 @@ export async function createPlanAction(formData: FormData) {
   const priceEuros = Number(String(formData.get("price")).replace(",", "."));
   const priceCents = Math.round(priceEuros * 100);
   const marketing = planMarketing(formData, priceCents);
+  const publicContent = planPublicContent(formData);
   const days = planDays(formData);
   const supportDays = planSupportDays(formData);
   const discordRoleId = planDiscordRoleId(formData);
@@ -699,6 +720,7 @@ export async function createPlanAction(formData: FormData) {
     !Number.isFinite(priceEuros) ||
     priceEuros < 0 ||
     !marketing.valid ||
+    !publicContent.valid ||
     !Number.isFinite(days) ||
     days < 0 ||
     (supportDays !== null && (!Number.isFinite(supportDays) || supportDays < 0)) ||
@@ -719,8 +741,8 @@ export async function createPlanAction(formData: FormData) {
   getDb()
     .prepare(
       `INSERT INTO plans (code, name, description, price_cents, currency, days, support_days, active, sort_order, cover_url, discord_role_id,
-                          badge_text, badge_active, compare_at_cents, discount_active, promo_text)
-       VALUES (?, ?, ?, ?, 'EUR', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                          badge_text, badge_active, compare_at_cents, discount_active, promo_text, features_json, cta_text)
+       VALUES (?, ?, ?, ?, 'EUR', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       code,
@@ -738,6 +760,8 @@ export async function createPlanAction(formData: FormData) {
       marketing.compareAtCents,
       marketing.discountActive,
       marketing.promoText,
+      publicContent.featuresJson,
+      publicContent.ctaText,
     );
 
   audit(actor.id, "plan_created", code);

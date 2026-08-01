@@ -3,14 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/session";
 import { audit } from "@/lib/db";
+import { isTweakEnabled } from "@/lib/optimizer-access";
 import {
   readCatalog,
   validateTweak,
   writeCatalog,
+  TWEAK_TIERS,
   type Action,
   type GpuType,
   type GpuVendor,
   type Tweak,
+  type TweakTier,
 } from "@/lib/catalog";
 
 /**
@@ -48,6 +51,13 @@ function parseActions(formData: FormData): Action[] {
   return out;
 }
 
+function parseTier(raw: FormDataEntryValue | null): TweakTier {
+  const value = String(raw ?? "");
+  return (TWEAK_TIERS as readonly string[]).includes(value)
+    ? (value as TweakTier)
+    : "basic";
+}
+
 export async function saveTweakAction(_prev: unknown, formData: FormData) {
   const actor = await requireRole("developer");
 
@@ -57,6 +67,13 @@ export async function saveTweakAction(_prev: unknown, formData: FormData) {
     name: String(formData.get("name") ?? "").trim(),
     description: String(formData.get("description") ?? "").trim(),
     layer: Number(formData.get("layer")) === 1 ? 1 : 0,
+    // Sem tier explicito o tweak cairia na regra herdada, que manda para
+    // ultimate tudo o que nao reconhece. Por defeito fica basic: um tweak
+    // visivel a mais corrige-se, um invisivel sem ninguem saber porque nao.
+    tier: parseTier(formData.get("tier")),
+    // getAll, nao get: o formulario manda um hidden "0" antes da checkbox,
+    // e get() devolveria sempre esse primeiro valor.
+    enabled: formData.getAll("enabled").includes("1"),
     impact: String(formData.get("impact") ?? "medio"),
     risk: String(formData.get("risk") ?? "baixo"),
     requiresReboot: formData.get("requiresReboot") === "1",
@@ -93,6 +110,65 @@ export async function saveTweakAction(_prev: unknown, formData: FormData) {
   revalidatePath("/panel/admin/catalog");
 
   return { ok: true, id: tweak.id };
+}
+
+/**
+ * Suspende ou repoe um tweak. Alternativa a apagar: o cliente deixa de o
+ * receber, mas a definicao fica no catalogo para se voltar atras.
+ */
+export async function toggleTweakAction(formData: FormData) {
+  const actor = await requireRole("developer");
+  const id = String(formData.get("id") ?? "");
+
+  const { tweaks } = readCatalog();
+  const target = tweaks.find((t) => t.id === id);
+  if (!target) return;
+
+  const next = tweaks.map((t) =>
+    t.id === id ? { ...t, enabled: !isTweakEnabled(t) } : t,
+  );
+
+  writeCatalog(next);
+  audit(actor.id, isTweakEnabled(target) ? "catalog_tweak_suspended" : "catalog_tweak_resumed", id);
+  revalidatePath("/panel/admin/catalog");
+}
+
+/**
+ * Duplica um tweak com id livre e ja suspenso. Suspenso de proposito: uma
+ * copia ainda por rever nao deve chegar a maquinas de clientes so porque
+ * alguem carregou em clonar e se distraiu.
+ */
+export async function cloneTweakAction(formData: FormData) {
+  const actor = await requireRole("developer");
+  const id = String(formData.get("id") ?? "");
+
+  const { tweaks } = readCatalog();
+  const source = tweaks.find((t) => t.id === id);
+  if (!source) return;
+
+  const taken = new Set(tweaks.map((t) => t.id));
+  let copyId = `${source.id}-copia`;
+  for (let n = 2; taken.has(copyId); n++) copyId = `${source.id}-copia-${n}`;
+
+  const copy: Tweak = {
+    ...structuredClone(source),
+    id: copyId,
+    name: `${source.name} (copia)`,
+    enabled: false,
+  };
+
+  // A copia so difere no id e no nome, portanto herda a validade do
+  // original. Se falhar aqui, e sinal de que o catalogo em disco ja tinha
+  // um tweak invalido - nao o multiplicamos.
+  const check = validateTweak(copy, [...taken]);
+  if (!check.ok) {
+    console.error(`[orion] clone recusado (${id} -> ${copyId}): ${check.error}`);
+    return;
+  }
+
+  writeCatalog([...tweaks, copy]);
+  audit(actor.id, "catalog_tweak_cloned", `${id} -> ${copyId}`);
+  revalidatePath("/panel/admin/catalog");
 }
 
 export async function deleteTweakAction(formData: FormData) {

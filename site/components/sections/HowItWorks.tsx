@@ -16,7 +16,7 @@ export default function HowItWorks() {
   const height = useTransform(scrollYProgress, [0, 1], ["0%", "100%"]);
 
   return (
-    <section id="process" className="relative">
+    <section id="process" className="relative overflow-hidden">
       <div className="section">
         <Reveal>
           <span className="eyebrow">How it works</span>

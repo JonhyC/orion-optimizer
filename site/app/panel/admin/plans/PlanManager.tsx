@@ -6,11 +6,13 @@ import {
   Check,
   Clock3,
   Crop as CropIcon,
+  Eye,
   Globe2,
   Headphones,
   Image as ImageIcon,
   Infinity as InfinityIcon,
   LockKeyhole,
+  ListChecks,
   MessageCircle,
   Megaphone,
   Pencil,
@@ -22,6 +24,7 @@ import {
   X,
   ZoomIn,
 } from "lucide-react";
+import PlanCardDisplay, { type PlanCardData } from "@/components/plans/PlanCardDisplay";
 import { createPlanAction, deletePlanAction, updatePlanAction } from "../../actions";
 
 export type AdminPlan = {
@@ -42,6 +45,8 @@ export type AdminPlan = {
   compare_at_cents: number | null;
   discount_active: number;
   promo_text: string | null;
+  features_json: string | null;
+  cta_text: string | null;
 };
 
 type DiscordRoleOption = {
@@ -163,6 +168,11 @@ export default function PlanManager({
                   {plan.description ?? "Sem descricao."}
                 </p>
 
+                <div className="mt-3 flex items-center gap-2 text-[11.5px] text-white/35">
+                  <ListChecks size={13} />
+                  {parsePlanFeatures(plan.features_json).length} informacoes publicas
+                </div>
+
                 {plan.discount_active === 1 && plan.promo_text && (
                   <div className="mt-3 flex items-center gap-2 text-[11.5px] font-medium text-[var(--chart-1)]">
                     <Megaphone size={13} />
@@ -263,9 +273,9 @@ function PlanModal({
   children: ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-[80] overflow-y-auto bg-black/75 px-4 py-8 backdrop-blur-sm">
-      <div className="mx-auto max-w-2xl rounded-lg border border-white/10 bg-[var(--panel-surface)] shadow-2xl">
-        <header className="flex items-center justify-between border-b border-white/[0.07] px-6 py-4">
+    <div className="fixed inset-0 z-[80] overflow-hidden bg-black/75 p-2 backdrop-blur-sm sm:p-4">
+      <div className="mx-auto flex max-h-[calc(100vh-1rem)] max-w-3xl flex-col overflow-hidden rounded-lg border border-white/10 bg-[var(--panel-surface)] shadow-2xl sm:max-h-[calc(100vh-2rem)]">
+        <header className="flex shrink-0 items-center justify-between border-b border-white/[0.07] px-5 py-4 sm:px-6">
           <h2 className="text-[16px] font-semibold text-white">{title}</h2>
           <button
             type="button"
@@ -313,12 +323,59 @@ function PlanForm({
   const [discountActive, setDiscountActive] = useState(plan?.discount_active === 1);
   const [coverPreview, setCoverPreview] = useState<string | null>(plan?.cover_url ?? null);
   const [cropSource, setCropSource] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PlanCardData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const action = mode === "create" ? createPlanAction : updatePlanAction;
 
   return (
-    <form action={action} onSubmit={onSubmitted} className="space-y-5 p-6">
+    <form
+      action={action}
+      onSubmit={(event) => {
+        const data = new FormData(event.currentTarget);
+        if (data.get("discountActive") === "1") {
+          const finalPrice = Number(String(data.get("price") ?? "").replace(",", "."));
+          const previousPrice = Number(String(data.get("compareAtPrice") ?? "").replace(",", "."));
+          if (!Number.isFinite(previousPrice) || previousPrice <= finalPrice) {
+            event.preventDefault();
+            window.alert("O preco anterior tem de ser superior ao preco final.");
+            return;
+          }
+        }
+        onSubmitted();
+      }}
+      className="space-y-5 overflow-y-auto overscroll-contain px-4 pb-6 sm:px-6"
+    >
       {plan && <input type="hidden" name="planId" value={plan.id} />}
+
+      <nav className="sticky top-0 z-40 -mx-4 flex gap-1 overflow-x-auto border-b border-white/[0.07] bg-[var(--panel-surface)]/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6">
+        {[
+          ["plan-content", "Conteudo"],
+          ["plan-access", "Preco e acesso"],
+          ["plan-marketing", "Campanha"],
+          ["plan-automation", "Automacao"],
+        ].map(([target, label], index) => (
+          <button
+            key={target}
+            type="button"
+            onClick={(event) => {
+              event.currentTarget.form
+                ?.querySelector(`#${target}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md px-3 text-[11.5px] font-medium text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white"
+          >
+            <span className="text-[10px] font-bold text-[var(--chart-1)]">{index + 1}</span>
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      <FormSectionHeading
+        id="plan-content"
+        number="1"
+        title="Conteudo publico"
+        description="Tudo o que o cliente le no cartao do plano na pagina principal."
+      />
 
       <div>
         <label className="text-[12px] font-medium text-white/50">Capa do plano</label>
@@ -392,6 +449,43 @@ function PlanForm({
         />
       </Field>
 
+      <div className="grid gap-4 sm:grid-cols-[1fr_220px]">
+        <Field label="Informacoes incluidas">
+          <textarea
+            name="features"
+            required
+            rows={7}
+            maxLength={1200}
+            defaultValue={parsePlanFeatures(plan?.features_json ?? null).join("\n")}
+            placeholder={"Uma informacao por linha\nOtimizacao de CPU\nConfiguracao de GPU\nRollback incluido"}
+            className={`${inputClass} resize-y leading-6`}
+          />
+          <span className="mt-1.5 block text-[10.5px] font-normal leading-4 text-white/25">
+            Uma linha cria um ponto com visto. Maximo de 12 linhas.
+          </span>
+        </Field>
+        <Field label="Texto do botao">
+          <input
+            name="ctaText"
+            required
+            maxLength={32}
+            defaultValue={plan?.cta_text ?? (plan ? `Get ${plan.name}` : "Get plan")}
+            placeholder="Get Pro"
+            className={inputClass}
+          />
+          <span className="mt-1.5 block text-[10.5px] font-normal leading-4 text-white/25">
+            Comando apresentado no fundo do cartao.
+          </span>
+        </Field>
+      </div>
+
+      <FormSectionHeading
+        id="plan-access"
+        number="2"
+        title="Preco e acesso"
+        description="Valor final, duracao da licenca e posicao no catalogo."
+      />
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Preco EUR">
           <input name="price" required defaultValue={plan ? (plan.price_cents / 100).toFixed(2) : "0.00"} inputMode="decimal" className={inputClass} />
@@ -424,7 +518,14 @@ function PlanForm({
       </div>
 
       <div className="border-t border-white/[0.07] pt-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <FormSectionHeading
+          id="plan-marketing"
+          number="3"
+          title="Destaques e campanha"
+          description="Faixa superior, desconto e mensagem promocional."
+          compact
+        />
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 text-[13px] font-semibold text-white/75">
               <Tag size={15} className="text-[var(--chart-1)]" />
@@ -530,7 +631,14 @@ function PlanForm({
       </div>
 
       <div className="border-t border-white/[0.07] pt-5">
-        <div className="flex items-center gap-2 text-[13px] font-semibold text-white/75">
+        <FormSectionHeading
+          id="plan-automation"
+          number="4"
+          title="Automacao e publicacao"
+          description="Cargo Discord, suporte e visibilidade do plano."
+          compact
+        />
+        <div className="mt-5 flex items-center gap-2 text-[13px] font-semibold text-white/75">
           <MessageCircle size={15} className="text-[var(--chart-1)]" />
           Cargo Discord do plano
         </div>
@@ -612,9 +720,22 @@ function PlanForm({
           />
           Visivel no site
         </label>
-        <button className="rounded-md bg-[var(--chart-1)] px-5 py-2.5 text-[13px] font-semibold text-[#16082c] transition-opacity hover:opacity-90">
-          {mode === "create" ? "Criar plano" : "Guardar alteracoes"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={(event) => {
+              const form = event.currentTarget.form;
+              if (form) setPreview(buildPlanPreview(new FormData(form), coverPreview));
+            }}
+            className="inline-flex items-center gap-2 rounded-md border border-white/12 px-4 py-2.5 text-[13px] font-semibold text-white/70 transition-colors hover:border-[var(--chart-1)] hover:text-white"
+          >
+            <Eye size={15} />
+            Visualizar
+          </button>
+          <button className="rounded-md bg-[var(--chart-1)] px-5 py-2.5 text-[13px] font-semibold text-[#16082c] transition-opacity hover:opacity-90">
+            {mode === "create" ? "Criar plano" : "Guardar alteracoes"}
+          </button>
+        </div>
       </div>
 
       {cropSource && (
@@ -630,8 +751,122 @@ function PlanForm({
           }}
         />
       )}
+
+      {preview && <PlanPreviewModal plan={preview} onClose={() => setPreview(null)} />}
     </form>
   );
+}
+
+function FormSectionHeading({
+  id,
+  number,
+  title,
+  description,
+  compact = false,
+}: {
+  id: string;
+  number: string;
+  title: string;
+  description: string;
+  compact?: boolean;
+}) {
+  return (
+    <div id={id} className={`scroll-mt-16 ${compact ? "" : "border-t border-white/[0.07] pt-5 first:border-0 first:pt-0"}`}>
+      <div className="flex items-start gap-3">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-[var(--chart-1)]/12 text-[11px] font-bold text-[var(--chart-1)]">
+          {number}
+        </span>
+        <div>
+          <h3 className="text-[13px] font-semibold text-white/80">{title}</h3>
+          <p className="mt-0.5 text-[11.5px] leading-5 text-white/30">{description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlanPreviewModal({ plan, onClose }: { plan: PlanCardData; onClose: () => void }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Pre-visualizacao do plano"
+      className="fixed inset-0 z-[110] overflow-y-auto bg-black/90 px-4 py-8 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <div className="mx-auto max-w-md" onClick={(event) => event.stopPropagation()}>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase text-[var(--chart-1)]">Pre-visualizacao</p>
+            <h3 className="mt-1 text-[18px] font-semibold text-white">Aspeto no site principal</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Fechar pre-visualizacao"
+            aria-label="Fechar pre-visualizacao"
+            className="grid h-9 w-9 place-items-center rounded-md border border-white/10 text-white/55 hover:text-white"
+          >
+            <X size={17} />
+          </button>
+        </div>
+        <PlanCardDisplay plan={plan} preview />
+        <p className="mt-4 text-center text-[11px] text-white/30">
+          Esta vista ainda nao publica nem guarda alteracoes.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function buildPlanPreview(formData: FormData, coverUrl: string | null): PlanCardData {
+  const price = euroValue(formData.get("price"));
+  const compareAt = euroValue(formData.get("compareAtPrice"));
+  const durationType = String(formData.get("durationType") ?? "days");
+  const supportType = String(formData.get("supportType") ?? "none");
+  const name = String(formData.get("name") ?? "").trim() || "Novo plano";
+
+  return {
+    name,
+    description: String(formData.get("description") ?? "").trim() || null,
+    price_cents: Math.max(0, Math.round(price * 100)),
+    currency: "EUR",
+    days: durationType === "lifetime" ? 0 : Math.max(1, Number(formData.get("days")) || 30),
+    support_days: supportType === "none"
+      ? null
+      : supportType === "lifetime"
+        ? 0
+        : Math.max(1, Number(formData.get("supportDays")) || 30),
+    cover_url: coverUrl,
+    badge_text: String(formData.get("badgeText") ?? "").trim() || null,
+    badge_active: formData.get("badgeActive") === "1" ? 1 : 0,
+    compare_at_cents: compareAt > 0 ? Math.round(compareAt * 100) : null,
+    discount_active: formData.get("discountActive") === "1" ? 1 : 0,
+    promo_text: String(formData.get("promoText") ?? "").trim() || null,
+    features: String(formData.get("features") ?? "")
+      .split(/\r?\n/)
+      .map((feature) => feature.trim())
+      .filter(Boolean)
+      .slice(0, 12),
+    cta_text: String(formData.get("ctaText") ?? "").trim() || `Get ${name}`,
+  };
+}
+
+function euroValue(value: FormDataEntryValue | null): number {
+  const parsed = Number(String(value ?? "0").replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parsePlanFeatures(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 function CropEditor({

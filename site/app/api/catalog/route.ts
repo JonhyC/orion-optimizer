@@ -4,7 +4,7 @@ import { bearerToken, clientIp, userFromToken } from "@/lib/auth";
 import { audit } from "@/lib/db";
 import { fail, ok } from "../_lib/respond";
 import { processExpiredPlans } from "@/lib/plan-expiry";
-import { filterTweaksForUser } from "@/lib/optimizer-access";
+import { filterTweaksForUser, isTweakEnabled } from "@/lib/optimizer-access";
 import type { Tweak } from "@/lib/catalog";
 
 export const runtime = "nodejs";
@@ -48,7 +48,10 @@ export async function GET(req: Request) {
     return fail("Catalogo malformado.", 500, "catalog_invalid");
   }
 
-  const allowedTweaks = filterTweaksForUser(user, catalog.tweaks);
+  // Suspensos saem antes do filtro de plano: um tweak retirado de circulacao
+  // nao e servido a ninguem, nem sequer aos cargos internos.
+  const liveTweaks = catalog.tweaks.filter(isTweakEnabled);
+  const allowedTweaks = filterTweaksForUser(user, liveTweaks);
   audit(user.id, "catalog_served", `${allowedTweaks.length} tweaks`, clientIp(req));
 
   return ok({

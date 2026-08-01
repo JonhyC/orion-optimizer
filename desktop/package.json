@@ -1,6 +1,6 @@
 {
   "name": "orion-optimizer-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Orion Optimizer desktop client for Windows",
   "main": "electron/main.mjs",
@@ -9,11 +9,14 @@
     "typecheck": "tsc --noEmit",
     "build:ui": "vite build",
     "build": "npm run typecheck && npm run build:ui && electron-builder --win nsis portable",
-    "pack": "npm run typecheck && npm run build:ui && electron-builder --win --dir"
+    "pack": "npm run typecheck && npm run build:ui && electron-builder --win --dir",
+    "release": "npm version patch --no-git-tag-version && npm run build && node scripts/publish-release.mjs",
+    "release:publish": "node scripts/publish-release.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
     "@fontsource/sora": "^5.3.0",
+    "electron-updater": "^6.8.9",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
@@ -46,6 +49,12 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://updates.orionoptimizer.invalid/downloads/windows"
+      }
+    ],
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -83,7 +92,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Orion Optimizer"
+      "shortcutName": "Orion Optimizer",
+      "runAfterFinish": true
     }
   }
 }

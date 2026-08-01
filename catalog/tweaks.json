@@ -6,6 +6,7 @@
       "name": "Efeitos visuais para desempenho",
       "description": "Desativa animacoes, sombras e transparencias do Explorer.",
       "layer": 0,
+      "tier": "basic",
       "impact": "medio",
       "risk": "nenhum",
       "requiresReboot": false,
@@ -19,6 +20,7 @@
       "name": "Remover atraso dos menus",
       "description": "MenuShowDelay de 400ms para 0ms.",
       "layer": 0,
+      "tier": "basic",
       "impact": "baixo",
       "risk": "nenhum",
       "requiresReboot": false,
@@ -28,10 +30,138 @@
       ]
     },
     {
+      "id": "ux.taskbar-animations",
+      "name": "Desativar animacoes da barra de tarefas",
+      "description": "Tira o efeito de deslize ao minimizar e ao passar entre janelas. O ganho e de resposta percebida, nao de FPS.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "name": "TaskbarAnimations", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "ux.window-animations",
+      "name": "Desativar animacao de minimizar e maximizar",
+      "description": "As janelas passam a aparecer e desaparecer de imediato, sem o salto animado.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Control Panel\\Desktop\\WindowMetrics", "name": "MinAnimate", "kind": "String", "value": "0" }
+      ]
+    },
+    {
+      "id": "ux.foreground-lock",
+      "name": "Permitir foco imediato a novas janelas",
+      "description": "Tira o bloqueio que faz uma janela nova piscar na barra em vez de vir para a frente.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Control Panel\\Desktop", "name": "ForegroundLockTimeout", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "ux.snap-assist",
+      "name": "Desativar sugestoes de Snap",
+      "description": "Deixa de propor janelas para preencher o lado livre do ecra ao encostar uma janela.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "nenhum",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "name": "SnapAssist", "kind": "DWord", "value": 0 },
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "name": "EnableSnapAssistFlyout", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "ux.show-file-extensions",
+      "name": "Mostrar extensoes de ficheiro",
+      "description": "Deixa de esconder o .exe e o .scr. Alem de conveniente, e defesa: ficheiro.pdf.exe passa a ler-se como o que e.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "nenhum",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "name": "HideFileExt", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "ux.explorer-this-pc",
+      "name": "Abrir o Explorer em Este PC",
+      "description": "Troca o arranque em Acesso Rapido por Este PC, que nao le a lista de ficheiros recentes.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "name": "LaunchTo", "kind": "DWord", "value": 1 }
+      ]
+    },
+    {
+      "id": "ux.taskbar-widgets",
+      "name": "Remover Widgets da barra de tarefas",
+      "description": "O painel de widgets mantem um processo a puxar noticias e meteorologia em background.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "medio",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "name": "TaskbarDa", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "ux.taskbar-chat",
+      "name": "Remover Chat da barra de tarefas",
+      "description": "Tira o icone do Teams pessoal, que pre-carrega ao iniciar sessao.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "name": "TaskbarMn", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "ux.search-box",
+      "name": "Encolher a caixa de pesquisa",
+      "description": "Reduz a pesquisa da barra de tarefas a um icone. Continua a funcionar pela tecla Windows.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Search", "name": "SearchboxTaskbarMode", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
       "id": "privacy.advertising-id",
       "name": "Desativar ID de publicidade",
       "description": "Impede apps de usarem o Advertising ID para perfilagem.",
       "layer": 0,
+      "tier": "basic",
       "impact": "nenhum",
       "risk": "nenhum",
       "requiresReboot": false,
@@ -45,6 +175,7 @@
       "name": "Desativar sugestoes e instalacoes silenciosas",
       "description": "Impede o Windows de instalar apps promocionais e sugerir conteudo no Menu Iniciar.",
       "layer": 0,
+      "tier": "basic",
       "impact": "medio",
       "risk": "nenhum",
       "requiresReboot": false,
@@ -56,10 +187,99 @@
       ]
     },
     {
+      "id": "privacy.start-suggestions",
+      "name": "Desativar sugestoes no Menu Iniciar e Definicoes",
+      "description": "Cobre os canais de conteudo promocional que o tweak de content delivery nao apanha.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "name": "SubscribedContent-338393Enabled", "kind": "DWord", "value": 0 },
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "name": "SubscribedContent-353694Enabled", "kind": "DWord", "value": 0 },
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "name": "SubscribedContent-353696Enabled", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "privacy.lockscreen-spotlight",
+      "name": "Desativar Spotlight no ecra de bloqueio",
+      "description": "Para de descarregar imagens e sugestoes da Microsoft para o ecra de bloqueio.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "name": "RotatingLockScreenOverlayEnabled", "kind": "DWord", "value": 0 },
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "name": "SubscribedContent-338387Enabled", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "privacy.start-tracking",
+      "name": "Nao registar apps mais abertas",
+      "description": "O Menu Iniciar deixa de contar que programas e documentos abres para ordenar as listas.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "nenhum",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "name": "Start_TrackProgs", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "privacy.tailored-experiences",
+      "name": "Desativar experiencias personalizadas",
+      "description": "Impede a Microsoft de usar os dados de diagnostico para sugerir conteudo dentro do Windows.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "nenhum",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Privacy", "name": "TailoredExperiencesWithDiagnosticDataEnabled", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "privacy.feedback-requests",
+      "name": "Nunca pedir feedback",
+      "description": "Poe a zero a frequencia dos inqueritos do Windows.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "nenhum",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\Siuf\\Rules", "name": "NumberOfSIUFInPeriod", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "privacy.input-collection",
+      "name": "Nao recolher escrita e caligrafia",
+      "description": "Desliga a recolha de texto e tinta digital usada para o dicionario pessoal na nuvem.",
+      "layer": 0,
+      "tier": "basic",
+      "impact": "nenhum",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\InputPersonalization", "name": "RestrictImplicitTextCollection", "kind": "DWord", "value": 1 },
+        { "hive": "HKCU", "key": "Software\\Microsoft\\InputPersonalization", "name": "RestrictImplicitInkCollection", "kind": "DWord", "value": 1 }
+      ]
+    },
+    {
       "id": "game.dvr-background",
       "name": "Desativar gravacao em background (Game DVR)",
       "description": "O Game DVR grava constantemente em background e custa FPS. Dos poucos tweaks com ganho medivel.",
       "layer": 0,
+      "tier": "basic",
       "impact": "alto",
       "risk": "nenhum",
       "requiresReboot": false,
@@ -74,6 +294,7 @@
       "name": "Desativar painel da Game Bar",
       "description": "Impede a Game Bar de aparecer ao abrir jogos.",
       "layer": 0,
+      "tier": "basic",
       "impact": "baixo",
       "risk": "nenhum",
       "requiresReboot": false,
@@ -83,10 +304,71 @@
       ]
     },
     {
+      "id": "input.mouse-acceleration",
+      "name": "Desativar aceleracao do rato",
+      "description": "Tira a precisao melhorada do ponteiro: a mesma distancia fisica passa a dar sempre a mesma distancia no ecra. Fundamental para mira consistente.",
+      "layer": 0,
+      "tier": "pro",
+      "impact": "alto",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Control Panel\\Mouse", "name": "MouseSpeed", "kind": "String", "value": "0" },
+        { "hive": "HKCU", "key": "Control Panel\\Mouse", "name": "MouseThreshold1", "kind": "String", "value": "0" },
+        { "hive": "HKCU", "key": "Control Panel\\Mouse", "name": "MouseThreshold2", "kind": "String", "value": "0" }
+      ]
+    },
+    {
+      "id": "input.mouse-hover-time",
+      "name": "Reduzir atraso de hover do rato",
+      "description": "MouseHoverTime de 400ms para 10ms. Afeta tooltips e pre-visualizacoes da barra de tarefas.",
+      "layer": 0,
+      "tier": "pro",
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Control Panel\\Mouse", "name": "MouseHoverTime", "kind": "String", "value": "10" }
+      ]
+    },
+    {
+      "id": "input.keyboard-repeat",
+      "name": "Teclado no maximo de repeticao",
+      "description": "Atraso inicial no minimo e taxa de repeticao no maximo.",
+      "layer": 0,
+      "tier": "pro",
+      "impact": "baixo",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Control Panel\\Keyboard", "name": "KeyboardDelay", "kind": "String", "value": "0" },
+        { "hive": "HKCU", "key": "Control Panel\\Keyboard", "name": "KeyboardSpeed", "kind": "String", "value": "31" }
+      ]
+    },
+    {
+      "id": "game.fse-behaviour",
+      "name": "Respeitar preferencia de ecra inteiro exclusivo",
+      "description": "Faz o Windows honrar a escolha do jogo entre ecra inteiro exclusivo e janela sem margens, em vez de forcar as optimizacoes dele.",
+      "layer": 0,
+      "tier": "pro",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "System\\GameConfigStore", "name": "GameDVR_HonorUserFSEBehaviorMode", "kind": "DWord", "value": 1 },
+        { "hive": "HKCU", "key": "System\\GameConfigStore", "name": "GameDVR_DXGIHonorFSEWindowsCompatible", "kind": "DWord", "value": 1 }
+      ]
+    },
+    {
       "id": "net.throttling-index",
       "name": "Desativar Network Throttling",
       "description": "O Windows limita pacotes de rede a 10 por ms fora de multimedia. Desativar reduz latencia em jogos online.",
       "layer": 1,
+      "tier": "pro",
       "impact": "medio",
       "risk": "baixo",
       "requiresReboot": true,
@@ -96,10 +378,25 @@
       ]
     },
     {
+      "id": "net.qos-bandwidth-limit",
+      "name": "Libertar largura de banda reservada ao QoS",
+      "description": "Poe a zero os 20% que o agendador de pacotes pode reservar. So tem efeito se o QoS Packet Scheduler estiver ligado a placa de rede - na maioria das maquinas nao muda nada.",
+      "layer": 1,
+      "tier": "pro",
+      "impact": "variavel",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Policies\\Microsoft\\Windows\\Psched", "name": "NonBestEffortLimit", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
       "id": "mmcss.games-priority",
       "name": "Prioridade MMCSS para jogos",
       "description": "Aumenta a prioridade de scheduling de CPU e GPU dada a processos de jogo.",
       "layer": 1,
+      "tier": "pro",
       "impact": "medio",
       "risk": "baixo",
       "requiresReboot": true,
@@ -112,10 +409,40 @@
       ]
     },
     {
+      "id": "mmcss.system-responsiveness",
+      "name": "Reduzir reserva do MMCSS para tarefas de fundo",
+      "description": "Baixa de 20% para 10% a fatia de CPU garantida a tarefas nao multimedia. Deixa mais para o jogo sem esfomear o audio.",
+      "layer": 1,
+      "tier": "pro",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "name": "SystemResponsiveness", "kind": "DWord", "value": 10 }
+      ]
+    },
+    {
+      "id": "mmcss.audio-priority",
+      "name": "Prioridade MMCSS para audio",
+      "description": "Sobe a prioridade da tarefa de audio. Ajuda contra estalidos e cortes com headset USB durante carga alta.",
+      "layer": 1,
+      "tier": "pro",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Audio", "name": "Priority", "kind": "DWord", "value": 6 },
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Audio", "name": "Scheduling Category", "kind": "String", "value": "High" }
+      ]
+    },
+    {
       "id": "gpu.hags",
       "name": "GPU Hardware-Accelerated Scheduling",
       "description": "Deixa a GPU gerir a sua propria memoria de video. Ganho depende do setup - medir antes e depois.",
       "layer": 1,
+      "tier": "ultimate",
       "impact": "variavel",
       "risk": "baixo",
       "requiresReboot": true,
@@ -129,12 +456,298 @@
       "name": "Reduzir parking de nucleos de CPU",
       "description": "Impede o Windows de estacionar nucleos agressivamente. So para desktops - em portateis aumenta calor e pode piorar por throttling.",
       "layer": 1,
+      "tier": "ultimate",
       "impact": "medio",
       "risk": "baixo",
       "requiresReboot": false,
       "conditions": { "chassis": ["desktop"] },
       "actions": [
         { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings\\54533251-82be-4824-96c1-47b60b740d00\\0cc5b647-c1df-4637-891a-dec35c318583", "name": "Attributes", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "power.unhide-boost-mode",
+      "name": "Revelar modo de boost do processador",
+      "description": "Torna visivel em Opcoes de Energia a definicao de boost, que vem escondida. Nao altera a definicao: passa a poder ser escolhida a mao.",
+      "layer": 1,
+      "tier": "ultimate",
+      "impact": "nenhum",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": { "chassis": ["desktop"] },
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings\\54533251-82be-4824-96c1-47b60b740d00\\be337238-0d82-4146-a960-4f3749d470c7", "name": "Attributes", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "cpu.priority-separation",
+      "name": "Favorecer a aplicacao em primeiro plano",
+      "description": "Da quantums de CPU mais longos ao programa em foco. Ganho em jogos, ligeira perda em tarefas de fundo como compressao e render.",
+      "layer": 1,
+      "tier": "ultimate",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\PriorityControl", "name": "Win32PrioritySeparation", "kind": "DWord", "value": 38 }
+      ]
+    },
+    {
+      "id": "mem.paging-executive",
+      "name": "Manter o kernel em RAM",
+      "description": "Impede o Windows de mandar o nucleo e os drivers para o ficheiro de paginacao. Precisa de 16 GB ou mais para valer a pena - com pouca RAM piora.",
+      "layer": 1,
+      "tier": "ultimate",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management", "name": "DisablePagingExecutive", "kind": "DWord", "value": 1 }
+      ]
+    },
+    {
+      "id": "mmcss.games-scheduling",
+      "name": "Perfil MMCSS completo para jogos",
+      "description": "Completa a tarefa Games com clock rate maximo, sem restricao de afinidade e sem tratamento de segundo plano. Complementa a prioridade MMCSS.",
+      "layer": 1,
+      "tier": "ultimate",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "name": "Clock Rate", "kind": "DWord", "value": 10000 },
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "name": "Affinity", "kind": "DWord", "value": 0 },
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "name": "Background Only", "kind": "String", "value": "False" }
+      ]
+    },
+    {
+      "id": "game.directx-swapchain",
+      "name": "Optimizacoes para jogos em janela",
+      "description": "Liga a swapchain moderna do Windows 11 para jogos em janela e sem margens. Tira uma copia de frame do caminho, o que baixa latencia de input sem exigir ecra inteiro exclusivo.",
+      "layer": 0,
+      "tier": "pro",
+      "impact": "alto",
+      "risk": "baixo",
+      "requiresReboot": false,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKCU", "key": "Software\\Microsoft\\DirectX\\UserGpuPreferences", "name": "DirectXUserGlobalSettings", "kind": "String", "value": "SwapEffectUpgradeEnable=1;" }
+      ]
+    },
+    {
+      "id": "storage.ntfs-last-access",
+      "name": "Nao registar data de ultimo acesso",
+      "description": "O NTFS escreve metadados sempre que um ficheiro e LIDO. Desligar poupa uma escrita por leitura - nota-se em pastas com muitos ficheiros, como bibliotecas de jogos e projetos de codigo.",
+      "layer": 1,
+      "tier": "pro",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\FileSystem", "name": "NtfsDisableLastAccessUpdate", "kind": "DWord", "value": 1 }
+      ]
+    },
+    {
+      "id": "storage.ntfs-short-names",
+      "name": "Nao criar nomes curtos 8.3",
+      "description": "Deixa de gerar o nome antigo estilo PROGRA~1 a cada ficheiro novo. So afeta ficheiros criados a partir daqui; os que ja existem mantem o nome curto.",
+      "layer": 1,
+      "tier": "pro",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\FileSystem", "name": "NtfsDisable8dot3NameCreation", "kind": "DWord", "value": 1 }
+      ]
+    },
+    {
+      "id": "privacy.telemetry-minimum",
+      "name": "Telemetria no minimo permitido",
+      "description": "Reduz a recolha de diagnostico ao nivel de seguranca. Menos servico a acordar e a enviar em background. As edicoes Home nao aceitam zero absoluto - o Windows assume o minimo delas.",
+      "layer": 1,
+      "tier": "pro",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "name": "AllowTelemetry", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "net.delivery-optimization",
+      "name": "Nao servir actualizacoes a outros PCs",
+      "description": "O Windows usa a tua ligacao para distribuir actualizacoes a outras maquinas. Isto desliga o envio e mantem a transferencia so da Microsoft. Continuas a receber tudo - muda quem carrega a banda de subida.",
+      "layer": 1,
+      "tier": "pro",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization", "name": "DODownloadMode", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "privacy.consumer-features",
+      "name": "Bloquear apps promocionais e conteudo da nuvem",
+      "description": "Impede a instalacao automatica de jogos e apps sugeridas em contas novas, e o conteudo optimizado pela nuvem. Poupa transferencias e arranque.",
+      "layer": 1,
+      "tier": "pro",
+      "impact": "medio",
+      "risk": "nenhum",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "name": "DisableWindowsConsumerFeatures", "kind": "DWord", "value": 1 },
+        { "hive": "HKLM", "key": "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "name": "DisableCloudOptimizedContent", "kind": "DWord", "value": 1 }
+      ]
+    },
+    {
+      "id": "mmcss.pro-audio",
+      "name": "Prioridade MMCSS para audio profissional",
+      "description": "Sobe a tarefa Pro Audio de 1 (o defeito do Windows) para 8, o maximo. So conta para software que use MMCSS Pro Audio - interfaces ASIO e DAWs. Em jogos e chamadas nao muda nada.",
+      "layer": 1,
+      "tier": "pro",
+      "impact": "variavel",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Pro Audio", "name": "Priority", "kind": "DWord", "value": 8 },
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Pro Audio", "name": "Scheduling Category", "kind": "String", "value": "High" },
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Pro Audio", "name": "SFIO Priority", "kind": "String", "value": "High" }
+      ]
+    },
+    {
+      "id": "storage.ntfs-memory",
+      "name": "Mais memoria para cache de metadados NTFS",
+      "description": "Aumenta a RAM que o NTFS usa para tabelas de ficheiros. Ajuda em discos com muitos ficheiros pequenos. Precisa de RAM sobrante - com 8 GB nao vale a pena.",
+      "layer": 1,
+      "tier": "ultimate",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\FileSystem", "name": "NtfsMemoryUsage", "kind": "DWord", "value": 2 }
+      ]
+    },
+    {
+      "id": "power.throttling-off",
+      "name": "Desativar Power Throttling",
+      "description": "O Windows abranda processos que julga estarem em segundo plano. Desligar mantem o relogio alto de forma consistente. So desktop: num portatil come bateria e aquece.",
+      "layer": 1,
+      "tier": "ultimate",
+      "impact": "alto",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": { "chassis": ["desktop"] },
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\Power\\PowerThrottling", "name": "PowerThrottlingOff", "kind": "DWord", "value": 1 }
+      ]
+    },
+    {
+      "id": "cpu.distribute-timers",
+      "name": "Distribuir interrupcoes de temporizador",
+      "description": "Espalha os temporizadores do kernel por todos os nucleos em vez de os concentrar no nucleo 0. Reduz picos de latencia em CPUs com muitos nucleos.",
+      "layer": 1,
+      "tier": "ultimate",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\kernel", "name": "DistributeTimers", "kind": "DWord", "value": 1 }
+      ]
+    },
+    {
+      "id": "gpu.multiplane-overlay",
+      "name": "Desativar Multiplane Overlay (MPO)",
+      "description": "O MPO causa tremular, ecra preto momentaneo e micro-stutter em varias combinacoes de driver e monitor, sobretudo com dois ecras a taxas diferentes. Desligar troca um pouco de eficiencia por estabilidade de imagem. Se nao tens estes sintomas, nao aplica.",
+      "layer": 1,
+      "tier": "ultimate",
+      "impact": "variavel",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": { "gpuVendor": ["NVIDIA", "AMD", "Intel"] },
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows\\Dwm", "name": "OverlayTestMode", "kind": "DWord", "value": 5 }
+      ]
+    },
+    {
+      "id": "mem.svchost-grouping",
+      "name": "Agrupar servicos em menos processos",
+      "description": "Acima de 3,5 GB de RAM o Windows da um processo svchost a cada servico - dezenas de processos, cada um com o seu custo fixo. Isto volta a agrupa-los e liberta algumas centenas de MB. Em troca, um servico que rebente pode levar os vizinhos do mesmo processo, e o Gestor de Tarefas fica menos legivel. Atribuir so a maquinas com RAM curta onde o ganho compensa.",
+      "layer": 1,
+      "tier": "special",
+      "impact": "alto",
+      "risk": "medio",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control", "name": "SvcHostSplitThresholdInKB", "kind": "DWord", "value": 67108864 }
+      ]
+    },
+    {
+      "id": "power.fast-startup",
+      "name": "Desativar Arranque Rapido",
+      "description": "O Arranque Rapido nao desliga o Windows: hiberna o kernel e volta a carrega-lo. Isso arrasta estado de drivers entre sessoes e e causa comum de problemas que 'so passam com um reinicio'. Desligar torna o encerramento real. O arranque fica alguns segundos mais lento - e uma troca de velocidade por estabilidade, nao um ganho de desempenho.",
+      "layer": 1,
+      "tier": "special",
+      "impact": "variavel",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power", "name": "HiberbootEnabled", "kind": "DWord", "value": 0 }
+      ]
+    },
+    {
+      "id": "cpu.timer-resolution",
+      "name": "Permitir resolucao de temporizador global",
+      "description": "A partir do Windows 11 22H2 um programa que pede temporizador de 0,5ms so o recebe para si proprio. Isto repoe o comportamento antigo, em que o pedido vale para todo o sistema. Baixa latencia de input em jogos que dependem disso; em portateis custa bateria por manter o CPU a acordar mais vezes.",
+      "layer": 1,
+      "tier": "special",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": { "chassis": ["desktop"] },
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\kernel", "name": "GlobalTimerResolutionRequests", "kind": "DWord", "value": 1 }
+      ]
+    },
+    {
+      "id": "mmcss.no-lazy-mode",
+      "name": "Desativar modo preguicoso do MMCSS",
+      "description": "O MMCSS relaxa a prioridade das tarefas multimedia quando julga haver folga. Desligar mantem a prioridade constante, o que estabiliza frametimes e latencia de audio a custa de mais consumo em repouso.",
+      "layer": 1,
+      "tier": "special",
+      "impact": "medio",
+      "risk": "baixo",
+      "requiresReboot": true,
+      "conditions": {},
+      "actions": [
+        { "hive": "HKLM", "key": "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "name": "NoLazyMode", "kind": "DWord", "value": 1 }
+      ]
+    },
+    {
+      "id": "power.unhide-idle-disable",
+      "name": "Revelar desativacao de estados idle do CPU",
+      "description": "Torna visivel em Opcoes de Energia a definicao que impede o processador de entrar em estados de baixo consumo. Nao a altera - so a expoe para ser escolhida a mao. Usada para diagnosticar micro-stutter causado por transicoes de C-state. So desktop: num portatil isto aquece e esvazia a bateria depressa.",
+      "layer": 1,
+      "tier": "special",
+      "impact": "nenhum",
+      "risk": "nenhum",
+      "requiresReboot": false,
+      "conditions": { "chassis": ["desktop"] },
+      "actions": [
+        { "hive": "HKLM", "key": "SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings\\54533251-82be-4824-96c1-47b60b740d00\\5d76a2ca-e8c0-402f-a133-2158492d58ad", "name": "Attributes", "kind": "DWord", "value": 0 }
       ]
     }
   ]

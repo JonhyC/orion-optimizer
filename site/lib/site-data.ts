@@ -88,18 +88,37 @@ export type PublicPlan = {
   compare_at_cents: number | null;
   discount_active: number;
   promo_text: string | null;
+  features: string[];
+  cta_text: string;
 };
 
 export function activePlans(): PublicPlan[] {
   const rows = getDb()
     .prepare(
       `SELECT id, code, name, description, price_cents, currency, days, support_days, cover_url,
-              badge_text, badge_active, compare_at_cents, discount_active, promo_text
+              badge_text, badge_active, compare_at_cents, discount_active, promo_text,
+              features_json, cta_text
        FROM plans WHERE active = 1 ORDER BY sort_order`,
     )
-    .all() as PublicPlan[];
+    .all() as Array<Omit<PublicPlan, "features"> & { features_json: string | null }>;
 
-  return rows.map((row) => ({ ...row }));
+  return rows.map(({ features_json, ...row }) => ({
+    ...row,
+    cta_text: row.cta_text || `Get ${row.name}`,
+    features: parsePlanFeatures(features_json),
+  }));
+}
+
+function parsePlanFeatures(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 export function nowTs(): number {

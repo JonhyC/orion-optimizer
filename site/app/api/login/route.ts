@@ -9,7 +9,7 @@ import {
   verifyCredentials,
   LOCKOUT_SECONDS,
 } from "@/lib/auth";
-import { audit } from "@/lib/db";
+import { audit, getDb } from "@/lib/db";
 import { body, fail, ok, str } from "../_lib/respond";
 import { processExpiredPlans } from "@/lib/plan-expiry";
 import { avatarUrl, discordConfig, refreshDiscordAccess } from "@/lib/discord";
@@ -22,6 +22,8 @@ export async function POST(req: Request) {
   const username = str(data.username).trim();
   const password = str(data.password);
   const hwid = str(data.hwid).trim() || null;
+  const clientVersionRaw = str(data.client_version).trim();
+  const clientVersion = /^\d+\.\d+\.\d+$/.test(clientVersionRaw) ? clientVersionRaw : null;
   const ip = clientIp(req);
 
   if (!username || !password) {
@@ -109,6 +111,11 @@ export async function POST(req: Request) {
 
   recordAttempt(username, ip, true);
   const { token, expiresAt } = issueToken(currentUser.id);
+  if (clientVersion) {
+    getDb()
+      .prepare("UPDATE users SET client_version = ?, client_seen_at = ? WHERE id = ?")
+      .run(clientVersion, Math.floor(Date.now() / 1000), currentUser.id);
+  }
   audit(currentUser.id, "login_ok", null, ip);
 
   return ok({

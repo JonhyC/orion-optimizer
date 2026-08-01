@@ -4,7 +4,15 @@ import next from "next";
 const production = process.argv.includes("--production");
 const hostname = "0.0.0.0";
 const port = Number(process.env.PORT ?? 3400);
-const app = next({ dev: !production, hostname, port });
+process.env.ORION_NEXT_DIST_DIR = production ? ".next" : ".next-dev";
+
+// Manter o cache de desenvolvimento separado impede que `next build`
+// substitua CSS e manifests enquanto o servidor local esta aberto.
+const app = next({
+  dev: !production,
+  hostname,
+  port,
+});
 const handle = app.getRequestHandler();
 
 await app.prepare();

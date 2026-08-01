@@ -170,7 +170,7 @@ export default function App() {
                 {view === "history" && <HistoryView key="history" notify={setToast} />}
                 {view === "system" && <SystemView key="system" profile={profile} settings={settings} />}
                 {view === "internal" && (
-                  <InternalView key="internal" account={catalog.account} notify={setToast} />
+                  <InternalView key="internal" state={catalog} profile={profile} settings={settings} notify={setToast} />
                 )}
               </AnimatePresence>
             </main>
@@ -391,8 +391,9 @@ function CatalogView({ state, profile, loading, onRefresh, notify }: { state: Ca
       <section className="system-summary">
         <SummaryItem icon={<Cpu />} label="Dispositivo" value={profile?.chassis === "laptop" ? "Portátil" : "Desktop"} />
         <SummaryItem icon={<MonitorCog />} label="GPU" value={profile?.gpuVendors?.join(" + ") || profile?.gpuVendor || "A detetar"} />
-        <SummaryItem icon={<MemoryStick />} label="Memória" value={`${profile?.ramGB ?? 0} GB RAM`} />
-        <SummaryItem icon={<ShieldCheck />} label="Privilégios" value={profile?.isAdmin ? "Administrador" : "Standard"} />
+        <SummaryItem icon={<UserRound />} label="Cargo Orion" value={ROLE_LABEL[state.account.role] ?? state.account.role} />
+        <SummaryItem icon={<Crown />} label="Plano" value={state.account.tier ? tierLabel(state.account.tier) : "Acesso interno"} />
+        <SummaryItem icon={<ShieldCheck />} label="Windows" value={profile?.isAdmin ? "Elevado" : "Sessão normal"} />
       </section>
 
       <div className="catalog-toolbar">
@@ -536,6 +537,7 @@ type InternalTool = {
 };
 
 const INTERNAL_TOOLS: InternalTool[] = [
+  { label: "Área pessoal", description: "Consultar licença, suporte e dispositivo", path: "/panel", icon: <UserRound />, minimumRole: "staff" },
   { label: "Painel", description: "Métricas e estado da operação Orion", path: "/panel/admin", icon: <Gauge />, minimumRole: "staff" },
   { label: "Contas", description: "Consultar utilizadores e prestar suporte", path: "/panel/admin/users", icon: <Users />, minimumRole: "staff" },
   { label: "Avaliações", description: "Moderar avaliações submetidas", path: "/panel/admin/reviews", icon: <ShieldCheck />, minimumRole: "staff" },
@@ -546,9 +548,21 @@ const INTERNAL_TOOLS: InternalTool[] = [
 
 const INTERNAL_ROLE_RANK = { staff: 1, developer: 2, owner: 3 } as const;
 
-function InternalView({ account, notify }: { account: CatalogState["account"]; notify: (toast: { tone: "good" | "bad"; message: string }) => void }) {
+const INTERNAL_CAPABILITIES = [
+  { label: "Suporte a membros", detail: "Consultar contas e ajudar na gestão de acesso", minimumRole: "staff" },
+  { label: "Moderação", detail: "Rever e moderar avaliações da comunidade", minimumRole: "staff" },
+  { label: "Gestão do catálogo", detail: "Manter otimizações e compatibilidade técnica", minimumRole: "developer" },
+  { label: "Controlo de qualidade", detail: "Validar o catálogo completo em modo real ou simulação", minimumRole: "developer" },
+  { label: "Gestão comercial", detail: "Configurar planos, preços e vendas", minimumRole: "owner" },
+  { label: "Controlo integral", detail: "Acesso a todas as ferramentas internas Orion", minimumRole: "owner" },
+] satisfies Array<{ label: string; detail: string; minimumRole: keyof typeof INTERNAL_ROLE_RANK }>;
+
+function InternalView({ state, profile, settings, notify }: { state: CatalogState; profile: SystemProfile | null; settings: LoginSettings; notify: (toast: { tone: "good" | "bad"; message: string }) => void }) {
+  const { account } = state;
   const role = account.role as keyof typeof INTERNAL_ROLE_RANK;
   const tools = INTERNAL_TOOLS.filter((tool) => INTERNAL_ROLE_RANK[role] >= INTERNAL_ROLE_RANK[tool.minimumRole]);
+  const capabilities = INTERNAL_CAPABILITIES.filter((capability) => INTERNAL_ROLE_RANK[role] >= INTERNAL_ROLE_RANK[capability.minimumRole]);
+  const compatibleTweaks = state.tweaks.filter((tweak) => state.eligibility[tweak.id]?.eligible).length;
 
   async function open(path: string) {
     try {
@@ -567,10 +581,12 @@ function InternalView({ account, notify }: { account: CatalogState["account"]; n
 
       <section className="internal-overview">
         <div><ShieldCheck size={18} /><span>Discord</span><strong>{account.discord_verified ? "Verificado" : "Por verificar"}</strong></div>
-        <div><Zap size={18} /><span>Optimizer</span><strong>Catálogo completo</strong></div>
+        <div><Zap size={18} /><span>Catálogo</span><strong>{compatibleTweaks}/{state.tweaks.length} compatíveis</strong></div>
         <div><Clock3 size={18} /><span>Licença</span><strong>{formatExpiry(account.expires_at)}</strong></div>
+        <div><ShieldCheck size={18} /><span>Windows</span><strong>{profile?.isAdmin ? "Elevado" : "Sessão normal"}</strong></div>
       </section>
 
+      <div className="section-heading"><div><span className="eyebrow">FERRAMENTAS</span><h2>Atalhos da equipa</h2></div><span>{tools.length} disponíveis</span></div>
       <div className="internal-tools">
         {tools.map((tool) => (
           <button key={tool.path} className="internal-tool" onClick={() => void open(tool.path)}>
@@ -580,6 +596,18 @@ function InternalView({ account, notify }: { account: CatalogState["account"]; n
           </button>
         ))}
       </div>
+
+      <section className="role-capabilities">
+        <div className="section-heading"><div><span className="eyebrow">PERMISSÕES</span><h2>Capacidades de {ROLE_LABEL[account.role]}</h2></div><span>{settings.server.replace(/^https?:\/\//, "")}</span></div>
+        <div className="capability-list">
+          {capabilities.map((capability) => (
+            <div key={capability.label} className="capability-row">
+              <span><Check size={14} /></span>
+              <div><strong>{capability.label}</strong><small>{capability.detail}</small></div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="access-matrix">
         <div className="access-matrix-heading"><div><span className="eyebrow">PLANOS</span><h2>Níveis do Optimizer</h2></div><span>O teu cargo desbloqueia todos</span></div>

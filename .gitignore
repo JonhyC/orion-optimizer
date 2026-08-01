@@ -16,6 +16,7 @@ server/data/
 # Node
 node_modules/
 .next/
+.next-dev/
 out/
 
 # Output de build do desktop: o dist/ e o bundle Vite, o release*/ leva o
@@ -27,8 +28,12 @@ desktop/release-new/
 # Instalador servido pelo site. Passa dos 100 MB por ficheiro que o GitHub
 # aceita - distribuido como asset de Release em vez de versionado.
 site/public/downloads/*.exe
+site/public/downloads/windows/*.exe
 *.tsbuildinfo
 next-env.d.ts
+
+# Artefacto temporario dos testes de sessao; pode conter dados restaurados.
+site/tests/.optimizer-session-backup.json
 
 # Perfis do Edge usados na automacao de browser: levam cookies, Login Data e
 # bases de autofill. Nunca versionar.

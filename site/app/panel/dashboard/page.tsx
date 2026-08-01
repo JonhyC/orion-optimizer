@@ -4,7 +4,6 @@ import {
   Activity,
   CalendarDays,
   Check,
-  Download,
   ExternalLink,
   HardDrive,
   Headphones,
@@ -21,6 +20,8 @@ import { getDb, nowSeconds, NO_PASSWORD } from "@/lib/db";
 import { processExpiredPlans } from "@/lib/plan-expiry";
 import { requireUser, roleAtLeast } from "@/lib/session";
 import { dateTime, money, ordersForUser } from "@/lib/stats";
+import { optimizerRelease } from "@/lib/optimizer-release";
+import OptimizerActions from "../OptimizerActions";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,7 @@ const ACTIVITY_LABEL: Record<string, string> = {
 export default async function PersonalDashboardPage() {
   await processExpiredPlans();
   const user = await requireUser();
+  const release = optimizerRelease();
   const now = nowSeconds();
   const internalAccess = roleAtLeast(user, "staff");
   const activePlan = Boolean(
@@ -102,23 +104,7 @@ export default async function PersonalDashboardPage() {
             Bem-vindo, {user.discord_username ?? user.username}. Aqui tens o resumo do teu acesso Orion.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <a
-            href="orion-optimizer://open"
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--chart-1)] px-4 py-2.5 text-[13px] font-semibold text-[#16082c] transition-opacity hover:opacity-90"
-          >
-            <ExternalLink size={15} />
-            Abrir Optimizer
-          </a>
-          <a
-            href="/downloads/Orion-Optimizer-Setup.exe"
-            download
-            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[var(--panel-surface)] px-4 py-2.5 text-[13px] font-semibold text-white/65 transition-colors hover:border-white/20 hover:text-white"
-          >
-            <Download size={15} />
-            Descarregar
-          </a>
-        </div>
+        <OptimizerActions installedVersion={user.client_version} release={release} />
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

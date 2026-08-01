@@ -50,20 +50,21 @@ const mockSource = `
       ["power.high-performance-bias", "Reduzir parking de nucleos de CPU", 1],
     ].map(([id, name, layer]) => ({ id, name, layer, description: "Ajuste Orion verificado e reversivel.", impact: "medio", risk: "baixo", requiresReboot: layer === 1, actions: [] }));
     const fixture = new URLSearchParams(location.search).get("fixture") || "basic";
-    const counts = { basic: 6, pro: 8, ultimate: 10, special: 10, owner: 10 };
-    const role = fixture === "owner" ? "owner" : "client";
-    const tier = fixture === "owner" ? "orion" : fixture;
+    const counts = { basic: 6, pro: 8, ultimate: 10, special: 10, staff: 10, developer: 10, owner: 10 };
+    const internalRoles = new Set(["staff", "developer", "owner"]);
+    const role = internalRoles.has(fixture) ? fixture : "client";
+    const tier = internalRoles.has(fixture) ? "orion" : fixture;
     const tweaks = allTweaks.slice(0, counts[fixture] || 6);
     const account = {
       username: "orion.visual",
-      display_name: fixture === "owner" ? "Orion Owner" : "Membro " + fixture[0].toUpperCase() + fixture.slice(1),
+      display_name: internalRoles.has(fixture) ? "Orion " + fixture[0].toUpperCase() + fixture.slice(1) : "Membro " + fixture[0].toUpperCase() + fixture.slice(1),
       discord_avatar_url: "https://cdn.discordapp.com/embed/avatars/0.png",
       role,
       tier,
       discord_verified: true,
-      expires_at: fixture === "special" || fixture === "owner" ? null : Math.floor(Date.now() / 1000) + 86400 * 30,
+      expires_at: fixture === "special" || internalRoles.has(fixture) ? null : Math.floor(Date.now() / 1000) + 86400 * 30,
       support_expires_at: null,
-      support_lifetime: fixture === "special" || fixture === "owner",
+      support_lifetime: fixture === "special" || internalRoles.has(fixture),
     };
     window.orion = {
       getSettings: async () => ({ server: "http://localhost:3400", username: "orion.visual" }),
@@ -90,7 +91,7 @@ await send("Emulation.setDeviceMetricsOverride", {
 });
 await send("Page.addScriptToEvaluateOnNewDocument", { source: mockSource });
 
-for (const fixture of ["basic", "pro", "ultimate", "special", "owner"]) {
+for (const fixture of ["basic", "pro", "ultimate", "special", "staff", "developer", "owner"]) {
   await send("Page.navigate", { url: `${appUrl}/?fixture=${fixture}` });
   await sleep(1600);
   await send("Runtime.evaluate", {
@@ -103,12 +104,12 @@ for (const fixture of ["basic", "pro", "ultimate", "special", "owner"]) {
     })()`,
   });
   await sleep(1800);
-  if (fixture === "owner") {
+  if (["staff", "developer", "owner"].includes(fixture)) {
     await send("Runtime.evaluate", { expression: `[...document.querySelectorAll('button')].find((button) => button.textContent.includes('Equipa'))?.click()` });
     await sleep(700);
   }
   const state = await send("Runtime.evaluate", {
-    expression: `JSON.stringify({ title: document.querySelector('.page-header h1')?.textContent, cards: document.querySelectorAll('.tweak-card').length, tools: document.querySelectorAll('.internal-tool').length, avatarLoaded: Boolean(document.querySelector('.avatar img')?.complete && document.querySelector('.avatar img')?.naturalWidth), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth })`,
+    expression: `JSON.stringify({ title: document.querySelector('.page-header h1')?.textContent, cards: document.querySelectorAll('.tweak-card').length, tools: document.querySelectorAll('.internal-tool').length, capabilities: document.querySelectorAll('.capability-row').length, hasStandard: document.body.textContent.includes('Standard'), avatarLoaded: Boolean(document.querySelector('.avatar img')?.complete && document.querySelector('.avatar img')?.naturalWidth), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth })`,
     returnByValue: true,
   });
   const screenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });

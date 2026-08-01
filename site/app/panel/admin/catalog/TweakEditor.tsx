@@ -86,11 +86,19 @@ export default function TweakEditor({
           />
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Camada" hint="0 = sem admin">
             <select name="layer" defaultValue={String(tweak?.layer ?? 0)} className={input}>
               <option value="0">0 — sem admin</option>
               <option value="1">1 — requer admin</option>
+            </select>
+          </Field>
+          <Field label="Plano minimo" hint="quem tem direito">
+            <select name="tier" defaultValue={tweak?.tier ?? "basic"} className={input}>
+              <option value="basic">Basic — todos</option>
+              <option value="pro">Pro e acima</option>
+              <option value="ultimate">Ultimate e acima</option>
+              <option value="special">Special — so planos do Owner</option>
             </select>
           </Field>
           <Field label="Impacto">
@@ -117,6 +125,21 @@ export default function TweakEditor({
                 className="h-4 w-4 accent-[var(--chart-1)]"
               />
               Requer
+            </label>
+          </Field>
+          <Field label="Estado" hint="suspenso nao e servido">
+            {/* O hidden garante que o campo chega ao servidor mesmo com a
+                caixa desmarcada - checkboxes desmarcadas nao sao enviadas. */}
+            <input type="hidden" name="enabled" value="0" />
+            <label className="mt-2 flex items-center gap-2 text-[13px] text-white/60">
+              <input
+                type="checkbox"
+                name="enabled"
+                value="1"
+                defaultChecked={tweak ? tweak.enabled !== false : true}
+                className="h-4 w-4 accent-[var(--good)]"
+              />
+              Activo
             </label>
           </Field>
         </div>

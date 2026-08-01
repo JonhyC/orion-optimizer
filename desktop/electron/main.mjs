@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import electronUpdater from "electron-updater";
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
@@ -10,6 +11,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
 const executionMode = isDev ? process.env.ORION_DESKTOP_MODE ?? "Mock" : "Real";
 const APP_PROTOCOL = "orion-optimizer";
+const { autoUpdater } = electronUpdater;
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
 
 if (process.defaultApp && process.argv[1]) {
   app.setAsDefaultProtocolClient(APP_PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
@@ -27,6 +31,7 @@ let apiToken = null;
 let account = null;
 let cachedProfile = null;
 let catalogCache = [];
+let updateInProgress = false;
 
 function focusMainWindow() {
   if (!mainWindow) return;
@@ -36,11 +41,106 @@ function focusMainWindow() {
 }
 
 if (hasInstanceLock) {
-  app.on("second-instance", () => focusMainWindow());
-  app.on("open-url", (event) => {
+  app.on("second-instance", (_event, argv) => {
+    focusMainWindow();
+    void handleProtocolArgs(argv);
+  });
+  app.on("open-url", (event, url) => {
     event.preventDefault();
     focusMainWindow();
+    void handleProtocolUrl(url);
   });
+}
+
+function protocolUrl(args) {
+  return args.find((argument) => String(argument).startsWith(`${APP_PROTOCOL}://`)) ?? null;
+}
+
+async function handleProtocolArgs(args) {
+  const value = protocolUrl(args);
+  if (value) await handleProtocolUrl(value);
+}
+
+async function handleProtocolUrl(value) {
+  let request;
+  try {
+    request = new URL(value);
+  } catch {
+    return;
+  }
+  if (request.hostname !== "update") {
+    focusMainWindow();
+    return;
+  }
+  await installLatestRelease(request.searchParams.get("version"));
+}
+
+async function installLatestRelease(expectedVersion) {
+  if (updateInProgress) return;
+  if (!app.isPackaged) {
+    dialog.showMessageBox({
+      type: "info",
+      title: "Orion Optimizer",
+      message: "A atualizacao automatica so esta ativa na aplicacao instalada.",
+    });
+    return;
+  }
+  updateInProgress = true;
+  try {
+    const settings = await readSettings();
+    const server = new URL(settings.server);
+    if (server.protocol !== "https:" && !isLocalServer(server)) {
+      throw new Error("O servidor de atualizacoes tem de usar HTTPS.");
+    }
+    const feedUrl = new URL("/downloads/windows/", server).toString();
+    autoUpdater.setFeedURL({ provider: "generic", url: feedUrl });
+    autoUpdater.on("download-progress", (progress) => {
+      mainWindow?.setProgressBar(Math.max(0, Math.min(1, progress.percent / 100)));
+      mainWindow?.setTitle(`Orion Optimizer · A atualizar ${Math.round(progress.percent)}%`);
+    });
+
+    focusMainWindow();
+    mainWindow?.setProgressBar(2);
+    mainWindow?.setTitle("Orion Optimizer · A procurar atualizacao");
+    const result = await autoUpdater.checkForUpdates();
+    const availableVersion = result?.updateInfo?.version;
+    if (!availableVersion || compareVersions(availableVersion, app.getVersion()) <= 0) {
+      if (expectedVersion && compareVersions(expectedVersion, app.getVersion()) > 0) {
+        throw new Error(`A versao ${expectedVersion} ainda nao esta disponivel no servidor.`);
+      }
+      mainWindow?.setProgressBar(-1);
+      mainWindow?.setTitle("Orion Optimizer");
+      focusMainWindow();
+      return;
+    }
+
+    await autoUpdater.downloadUpdate();
+    mainWindow?.setProgressBar(-1);
+    mainWindow?.hide();
+    setImmediate(() => autoUpdater.quitAndInstall(false, true));
+  } catch (error) {
+    mainWindow?.setProgressBar(-1);
+    mainWindow?.setTitle("Orion Optimizer");
+    dialog.showErrorBox(
+      "Atualizacao do Orion Optimizer",
+      error instanceof Error ? error.message : "Nao foi possivel instalar a atualizacao.",
+    );
+    updateInProgress = false;
+  }
+}
+
+function isLocalServer(url) {
+  return ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+}
+
+function compareVersions(left, right) {
+  const a = String(left).split(".").map(Number);
+  const b = String(right).split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const difference = (a[index] || 0) - (b[index] || 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
 }
 
 function enginePaths() {
@@ -206,6 +306,7 @@ function registerIpc() {
         username: String(credentials.username ?? "").trim(),
         password: String(credentials.password ?? "").trim(),
         hwid: cachedProfile.hwid,
+        client_version: app.getVersion(),
       }),
     });
     apiToken = data.token;
@@ -312,6 +413,7 @@ function createWindow() {
 app.whenReady().then(() => {
   registerIpc();
   createWindow();
+  void handleProtocolArgs(process.argv);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
