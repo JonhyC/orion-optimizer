@@ -13,10 +13,15 @@ import { prefersReducedMotion } from "@/lib/utils";
 export default function PageLoader() {
   const [done, setDone] = useState(true);
   const [pct, setPct] = useState(0);
+  const [started, setStarted] = useState(false);
 
   useEffect(() => {
-    if (prefersReducedMotion()) return;
+    if (prefersReducedMotion()) {
+      announcePageReady();
+      return;
+    }
 
+    setStarted(true);
     setDone(false);
     const start = performance.now();
     const DURATION = 1500;
@@ -45,7 +50,7 @@ export default function PageLoader() {
   }, []);
 
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={() => started && announcePageReady()}>
       {!done && (
         <motion.div
           className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-void"
@@ -78,6 +83,11 @@ export default function PageLoader() {
       )}
     </AnimatePresence>
   );
+}
+
+function announcePageReady() {
+  document.body.dataset.orionPageReady = "true";
+  window.dispatchEvent(new Event("orion:page-ready"));
 }
 
 /** Marca Orion: orbita segmentada + raio. Usada no loader e na navegacao. */

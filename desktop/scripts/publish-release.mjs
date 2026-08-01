@@ -12,7 +12,9 @@ const setupName = `Orion Optimizer Setup ${pkg.version}.exe`;
 const sourceSetup = path.join(root, "release", setupName);
 const sourceBlockmap = `${sourceSetup}.blockmap`;
 const sourceManifest = path.join(root, "release", "latest.yml");
+const downloadsDir = path.join(site, "public", "downloads");
 const windowsDir = path.join(site, "public", "downloads", "windows");
+const localPublish = process.argv.includes("--local");
 const repository = process.env.ORION_GITHUB_REPOSITORY || "JonhyC/orion-optimizer";
 const tag = `v${pkg.version}`;
 const encodedSetupName = setupName.split(" ").map(encodeURIComponent).join("%20");
@@ -22,23 +24,31 @@ for (const file of [sourceSetup, sourceBlockmap, sourceManifest]) {
   await fs.access(file);
 }
 
-runGh(["auth", "status", "--hostname", "github.com"]);
+if (!localPublish) runGh(["auth", "status", "--hostname", "github.com"]);
 
 const updateInfo = yaml.load(await fs.readFile(sourceManifest, "utf8"));
 if (!updateInfo || typeof updateInfo !== "object" || !Array.isArray(updateInfo.files)) {
   throw new Error("O latest.yml gerado pelo Electron Builder e invalido.");
 }
-for (const file of updateInfo.files) file.url = downloadUrl;
-updateInfo.path = downloadUrl;
+const manifestSetupPath = localPublish ? setupName : downloadUrl;
+for (const file of updateInfo.files) file.url = manifestSetupPath;
+updateInfo.path = manifestSetupPath;
 await fs.writeFile(sourceManifest, yaml.dump(updateInfo, { lineWidth: -1 }), "utf8");
 
-if (!releaseExists()) {
-  runGh(["release", "create", tag, "--repo", repository, "--target", "main", "--title", `Orion Optimizer ${pkg.version}`, "--notes", `Release automatica do Orion Optimizer ${pkg.version}.`]);
+if (!localPublish) {
+  if (!releaseExists()) {
+    runGh(["release", "create", tag, "--repo", repository, "--target", "main", "--title", `Orion Optimizer ${pkg.version}`, "--notes", `Release automatica do Orion Optimizer ${pkg.version}.`]);
+  }
+  runGh(["release", "upload", tag, sourceSetup, sourceBlockmap, sourceManifest, "--repo", repository, "--clobber"]);
 }
-runGh(["release", "upload", tag, sourceSetup, sourceBlockmap, sourceManifest, "--repo", repository, "--clobber"]);
 
 await fs.mkdir(windowsDir, { recursive: true });
 await fs.copyFile(sourceManifest, path.join(windowsDir, "latest.yml"));
+if (localPublish) {
+  await fs.copyFile(sourceSetup, path.join(windowsDir, setupName));
+  await fs.copyFile(sourceBlockmap, path.join(windowsDir, `${setupName}.blockmap`));
+  await fs.copyFile(sourceSetup, path.join(downloadsDir, "Orion-Optimizer-Setup.exe"));
+}
 
 const sha256 = crypto
   .createHash("sha256")
@@ -46,7 +56,7 @@ const sha256 = crypto
   .digest("hex");
 const release = {
   version: pkg.version,
-  downloadPath: downloadUrl,
+  downloadPath: localPublish ? "/downloads/Orion-Optimizer-Setup.exe" : downloadUrl,
   sha256,
 };
 await fs.writeFile(
@@ -55,7 +65,11 @@ await fs.writeFile(
   "utf8",
 );
 
-console.log(`Orion Optimizer ${pkg.version} publicado no site.`);
+console.log(
+  localPublish
+    ? `Orion Optimizer ${pkg.version} publicado no site local.`
+    : `Orion Optimizer ${pkg.version} publicado no GitHub e no site.`,
+);
 
 function releaseExists() {
   return spawnSync("gh", ["release", "view", tag, "--repo", repository], {

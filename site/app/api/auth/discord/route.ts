@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { authorizeUrl, discordConfig } from "@/lib/discord";
+import { applicationUrl, authorizeUrl, discordConfig } from "@/lib/discord";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export async function GET() {
 
   if (!cfg) {
     return NextResponse.redirect(
-      new URL("/panel/login?error=discord_off", process.env.APP_URL ?? "http://localhost:3400"),
+      new URL("/panel/login?error=discord_off", applicationUrl()),
     );
   }
 

@@ -1,16 +1,33 @@
 "use client";
 
 import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
 import ParticleField from "../three/ParticleField";
 import MagneticButton from "../ui/MagneticButton";
 import { DISCORD_URL } from "@/lib/data";
+import { prefersReducedMotion } from "@/lib/utils";
 
 const TITLE = ["UNLOCK", "YOUR", "PC'S", "TRUE", "PERFORMANCE"];
 
 export default function Hero() {
   const ref = useRef<HTMLElement>(null);
+  const [introReady, setIntroReady] = useState(false);
+
+  useEffect(() => {
+    const reveal = () => setIntroReady(true);
+    if (document.body.dataset.orionPageReady === "true" || prefersReducedMotion()) {
+      reveal();
+      return;
+    }
+
+    window.addEventListener("orion:page-ready", reveal, { once: true });
+    const fallback = window.setTimeout(reveal, 4000);
+    return () => {
+      window.removeEventListener("orion:page-ready", reveal);
+      window.clearTimeout(fallback);
+    };
+  }, []);
 
   // Parallax de saida: o conteudo sobe e desvanece enquanto a seccao sai.
   const { scrollYProgress } = useScroll({
@@ -59,8 +76,8 @@ export default function Hero() {
         className="relative z-10 mx-auto w-full max-w-7xl px-6 py-32 md:px-10"
       >
         <motion.div
-          initial={false}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 18 }}
+          animate={introReady ? { opacity: 1, y: 0 } : undefined}
           transition={{ delay: 0.35, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
         >
           <span className="eyebrow">
@@ -76,8 +93,8 @@ export default function Hero() {
                 className={`inline-block ${
                   word === "PERFORMANCE" ? "text-neon-gradient" : "text-gradient"
                 }`}
-                initial={false}
-                animate={{ y: "0%", opacity: 1 }}
+                initial={{ y: "110%", opacity: 0 }}
+                animate={introReady ? { y: "0%", opacity: 1 } : undefined}
                 transition={{
                   delay: 0.45 + i * 0.085,
                   duration: 0.9,
@@ -91,8 +108,8 @@ export default function Hero() {
         </h1>
 
         <motion.div
-          initial={false}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 24 }}
+          animate={introReady ? { opacity: 1, y: 0 } : undefined}
           transition={{ delay: 0.95, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
           className="mt-10 flex flex-col gap-1.5 text-lg font-medium text-white/55 sm:flex-row sm:gap-4 sm:text-xl"
         >
@@ -104,8 +121,8 @@ export default function Hero() {
         </motion.div>
 
         <motion.div
-          initial={false}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 24 }}
+          animate={introReady ? { opacity: 1, y: 0 } : undefined}
           transition={{ delay: 1.1, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
           className="mt-12 flex flex-wrap items-center gap-5"
         >
@@ -120,8 +137,8 @@ export default function Hero() {
         </motion.div>
 
         <motion.div
-          initial={false}
-          animate={{ opacity: 1 }}
+          initial={{ opacity: 0 }}
+          animate={introReady ? { opacity: 1 } : undefined}
           transition={{ delay: 1.4, duration: 0.9 }}
           className="mt-14 flex flex-wrap items-center gap-x-8 gap-y-3 text-[13px] text-white/40"
         >
@@ -143,8 +160,8 @@ export default function Hero() {
       {/* indicador de scroll */}
       <motion.div
         aria-hidden
-        initial={false}
-        animate={{ opacity: 1 }}
+        initial={{ opacity: 0 }}
+        animate={introReady ? { opacity: 1 } : undefined}
         transition={{ delay: 1.8 }}
         className="absolute bottom-8 left-1/2 z-10 -translate-x-1/2"
       >

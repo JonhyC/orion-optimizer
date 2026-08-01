@@ -59,11 +59,23 @@ export function discordConfig(): DiscordConfig | null {
     tierUltimate: process.env.DISCORD_TIER_ULTIMATE ?? "",
     tierPro: process.env.DISCORD_TIER_PRO ?? "",
     tierBasic: process.env.DISCORD_TIER_BASIC ?? "",
-    appUrl: (process.env.APP_URL ?? "http://localhost:3400").replace(/\/$/, ""),
+    appUrl: applicationUrl(),
     // Por defeito exige pertencer ao servidor: sem isso qualquer pessoa com
     // conta Discord entrava no painel.
     requireGuild: process.env.DISCORD_REQUIRE_GUILD !== "false",
   };
+}
+
+/** URL publica estavel usada pelo callback OAuth. */
+export function applicationUrl(): string {
+  const configured = process.env.APP_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+
+  const vercelHost =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim() || process.env.VERCEL_URL?.trim();
+  if (vercelHost) return `https://${vercelHost.replace(/^https?:\/\//, "").replace(/\/$/, "")}`;
+
+  return "http://localhost:3400";
 }
 
 export type DiscordGuildRole = {

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
+  applicationUrl,
   discordConfig,
   exchangeCode,
   fetchGuildRoles,
@@ -22,7 +23,7 @@ const STATE_COOKIE = "orion_oauth_state";
 export async function GET(req: Request) {
   await processExpiredPlans();
   const cfg = discordConfig();
-  const base = cfg?.appUrl ?? process.env.APP_URL ?? "http://localhost:3400";
+  const base = cfg?.appUrl ?? applicationUrl();
   const back = (reason: string) => NextResponse.redirect(new URL(`/panel/login?error=${reason}`, base));
 
   if (!cfg) return back("discord_off");

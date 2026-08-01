@@ -54,14 +54,13 @@ export default function LoginForm({
 
           <div className="mt-5 rounded-xl border border-[var(--warning)]/25 bg-[var(--warning)]/[0.06] px-4 py-3.5">
             <p className="text-[12.5px] font-semibold text-[var(--warning)]">
-              Falta a aplicação Discord
+              {deployed ? "Login temporariamente indisponível" : "Falta a aplicação Discord"}
             </p>
             <p className="mt-1.5 text-[12px] leading-relaxed text-white/45">
               {deployed ? (
                 <>
-                  Define estas variáveis no painel do alojamento, em{" "}
-                  <span className="text-white/65">Environment Variables</span>, e
-                  faz um deploy novo:
+                  A configuração de autenticação não está disponível neste servidor.
+                  Tenta novamente mais tarde.
                 </>
               ) : (
                 <>
@@ -70,27 +69,21 @@ export default function LoginForm({
                 </>
               )}
             </p>
-            <ul className="mt-2.5 space-y-1">
-              {missing.map((k) => (
-                <li key={k} className="font-mono text-[11.5px] text-[var(--warning)]">
-                  {k}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-3 text-[11.5px] leading-relaxed text-white/30">
-              {deployed ? (
-                <>
-                  O <code className="text-white/45">.env.local</code> fica de fora
-                  do git de propósito — leva o client secret e o token do bot.
-                  Num servidor, os valores vêm sempre das variáveis de ambiente.
-                </>
-              ) : (
-                <>
+            {!deployed && (
+              <>
+                <ul className="mt-2.5 space-y-1">
+                  {missing.map((k) => (
+                    <li key={k} className="font-mono text-[11.5px] text-[var(--warning)]">
+                      {k}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-[11.5px] leading-relaxed text-white/30">
                   Para confirmar depois:{" "}
                   <code className="text-white/45">node scripts/admin.ts check-discord</code>
-                </>
-              )}
-            </p>
+                </p>
+              </>
+            )}
           </div>
         </>
       )}
