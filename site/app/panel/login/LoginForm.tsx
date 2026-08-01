@@ -15,9 +15,12 @@ import { loginAction } from "../actions";
 export default function LoginForm({
   discordEnabled,
   missing,
+  deployed = false,
 }: {
   discordEnabled: boolean;
   missing: string[];
+  /** Em producao nao ha .env.local: as variaveis vem do painel do alojamento. */
+  deployed?: boolean;
 }) {
   const [state, formAction] = useActionState(loginAction, null as { error?: string } | null);
   const [showFallback, setShowFallback] = useState(false);
@@ -54,8 +57,18 @@ export default function LoginForm({
               Falta a aplicação Discord
             </p>
             <p className="mt-1.5 text-[12px] leading-relaxed text-white/45">
-              Cria-a em discord.com/developers/applications e preenche em{" "}
-              <code className="text-white/65">site/.env.local</code>:
+              {deployed ? (
+                <>
+                  Define estas variáveis no painel do alojamento, em{" "}
+                  <span className="text-white/65">Environment Variables</span>, e
+                  faz um deploy novo:
+                </>
+              ) : (
+                <>
+                  Cria a aplicação em discord.com/developers/applications e
+                  preenche em <code className="text-white/65">site/.env.local</code>:
+                </>
+              )}
             </p>
             <ul className="mt-2.5 space-y-1">
               {missing.map((k) => (
@@ -65,8 +78,18 @@ export default function LoginForm({
               ))}
             </ul>
             <p className="mt-3 text-[11.5px] leading-relaxed text-white/30">
-              Para confirmar depois:{" "}
-              <code className="text-white/45">node scripts/admin.ts check-discord</code>
+              {deployed ? (
+                <>
+                  O <code className="text-white/45">.env.local</code> fica de fora
+                  do git de propósito — leva o client secret e o token do bot.
+                  Num servidor, os valores vêm sempre das variáveis de ambiente.
+                </>
+              ) : (
+                <>
+                  Para confirmar depois:{" "}
+                  <code className="text-white/45">node scripts/admin.ts check-discord</code>
+                </>
+              )}
             </p>
           </div>
         </>

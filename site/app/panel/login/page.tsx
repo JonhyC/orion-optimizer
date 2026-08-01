@@ -46,7 +46,15 @@ export default async function LoginPage({
         </div>
       )}
 
-      <LoginForm discordEnabled={discordEnabled} missing={setup.missing} />
+      {/* Em producao o .env.local nao existe: fica de fora do git de
+          proposito, porque leva o client secret e o token do bot. Mandar
+          alguem procura-lo num servidor e mandar procurar o que nao esta
+          la - por isso a mensagem muda conforme o sitio onde corre. */}
+      <LoginForm
+        discordEnabled={discordEnabled}
+        missing={setup.missing}
+        deployed={process.env.NODE_ENV === "production"}
+      />
     </div>
   );
 }
