@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("orion", {
   apply: (tweak) => ipcRenderer.invoke("tweak:apply", tweak),
   sessions: () => ipcRenderer.invoke("history:list"),
   rollback: (session) => ipcRenderer.invoke("history:rollback", session),
+  internalOverview: () => ipcRenderer.invoke("internal:overview"),
   openPortal: (pathname) => ipcRenderer.invoke("portal:open", pathname),
   minimize: () => ipcRenderer.send("window:minimize"),
   maximize: () => ipcRenderer.send("window:maximize"),

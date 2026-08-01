@@ -94,6 +94,39 @@ function tierLabel(value: string) {
   return value === "orion" || value === "special" ? "SPECIAL" : value.toUpperCase();
 }
 
+const ACTIVITY_LABELS: Record<string, string> = {
+  catalog_served: "Catálogo consultado",
+  optimizer_previewed: "Otimização analisada",
+  optimizer_applied: "Otimização executada",
+  optimizer_rolled_back: "Otimização revertida",
+  login_ok: "Login no Optimizer",
+  panel_login_ok: "Login no site",
+  login_failed: "Login recusado",
+  login_hwid_mismatch: "Computador não autorizado",
+  panel_hwid_reset: "Máquina desligada",
+  self_hwid_reset: "Máquina reiniciada",
+  panel_user_created: "Conta criada",
+  panel_user_updated: "Conta atualizada",
+  panel_plan_assigned: "Plano atribuído",
+  plan_created: "Plano criado",
+  catalog_tweak_created: "Otimização criada",
+  catalog_tweak_updated: "Otimização atualizada",
+  review_approved: "Avaliação aprovada",
+};
+
+function relativeTime(timestamp: number | null): string {
+  if (!timestamp) return "Sem atividade";
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000 - timestamp));
+  if (seconds < 60) return "Agora";
+  if (seconds < 3600) return `Há ${Math.floor(seconds / 60)} min`;
+  if (seconds < 86400) return `Há ${Math.floor(seconds / 3600)} h`;
+  return `Há ${Math.floor(seconds / 86400)} d`;
+}
+
+function money(cents: number): string {
+  return new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(cents / 100);
+}
+
 export default function App() {
   const [settings, setSettings] = useState<LoginSettings | null>(null);
   const [profile, setProfile] = useState<SystemProfile | null>(null);
@@ -563,6 +596,38 @@ function InternalView({ state, profile, settings, notify }: { state: CatalogStat
   const tools = INTERNAL_TOOLS.filter((tool) => INTERNAL_ROLE_RANK[role] >= INTERNAL_ROLE_RANK[tool.minimumRole]);
   const capabilities = INTERNAL_CAPABILITIES.filter((capability) => INTERNAL_ROLE_RANK[role] >= INTERNAL_ROLE_RANK[capability.minimumRole]);
   const compatibleTweaks = state.tweaks.filter((tweak) => state.eligibility[tweak.id]?.eligible).length;
+  const [overview, setOverview] = useState<InternalOverview | null>(null);
+  const [operationsLoading, setOperationsLoading] = useState(true);
+  const [operationsError, setOperationsError] = useState("");
+  const [peopleSearch, setPeopleSearch] = useState("");
+
+  async function loadOperations(silent = false) {
+    if (!silent) setOperationsLoading(true);
+    try {
+      setOverview(await window.orion.internalOverview());
+      setOperationsError("");
+    } catch (error) {
+      setOperationsError(cleanError(error));
+    } finally {
+      if (!silent) setOperationsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadOperations();
+    const timer = setInterval(() => void loadOperations(true), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const visiblePeople = useMemo(() => {
+    const query = peopleSearch.trim().toLocaleLowerCase("pt");
+    if (!query) return overview?.people ?? [];
+    return (overview?.people ?? []).filter((person) =>
+      `${person.displayName} ${person.username} ${person.role} ${person.tier ?? ""}`
+        .toLocaleLowerCase("pt")
+        .includes(query),
+    );
+  }, [overview, peopleSearch]);
 
   async function open(path: string) {
     try {
@@ -584,6 +649,64 @@ function InternalView({ state, profile, settings, notify }: { state: CatalogStat
         <div><Zap size={18} /><span>Catálogo</span><strong>{compatibleTweaks}/{state.tweaks.length} compatíveis</strong></div>
         <div><Clock3 size={18} /><span>Licença</span><strong>{formatExpiry(account.expires_at)}</strong></div>
         <div><ShieldCheck size={18} /><span>Windows</span><strong>{profile?.isAdmin ? "Elevado" : "Sessão normal"}</strong></div>
+      </section>
+
+      <section className="operations-console">
+        <div className="section-heading operations-heading">
+          <div><span className="eyebrow">OPERAÇÃO EM TEMPO REAL</span><h2>Estado do site e do Optimizer</h2></div>
+          <button className="icon-button" onClick={() => void loadOperations()} disabled={operationsLoading} title="Atualizar operação">
+            <RefreshCcw size={15} className={operationsLoading ? "spin" : ""} />
+          </button>
+        </div>
+
+        {operationsError && <div className="operations-error"><CircleAlert size={15} />{operationsError}</div>}
+        {operationsLoading && !overview ? (
+          <div className="page-loading"><Spinner />A carregar operação</div>
+        ) : overview && (
+          <>
+            <div className="operations-metrics">
+              <OperationMetric label="Online no site" value={String(overview.metrics.onlineSite)} detail="últimos 5 minutos" tone="good" />
+              <OperationMetric label="Online no Optimizer" value={String(overview.metrics.onlineOptimizer)} detail="últimos 5 minutos" tone="good" />
+              <OperationMetric label="Ações do Optimizer" value={String(overview.metrics.optimizerActions24h)} detail="últimas 24 horas" />
+              <OperationMetric label="Pedidos de catálogo" value={String(overview.metrics.catalogRequests24h)} detail="últimas 24 horas" />
+              <OperationMetric label="Logins falhados" value={String(overview.metrics.failedLogins24h)} detail="últimas 24 horas" tone={overview.metrics.failedLogins24h > 0 ? "warn" : "default"} />
+              {overview.metrics.revenue30Cents !== null && <OperationMetric label="Receita" value={money(overview.metrics.revenue30Cents)} detail="últimos 30 dias" />}
+            </div>
+
+            <div className="operations-grid">
+              <section className="operations-panel">
+                <div className="operations-panel-header">
+                  <div><strong>Utilizadores e presença</strong><span>{overview.metrics.activeLicenses}/{overview.metrics.users} licenças ativas</span></div>
+                  <label className="operations-search"><Search size={13} /><input value={peopleSearch} onChange={(event) => setPeopleSearch(event.target.value)} placeholder="Pesquisar" /></label>
+                </div>
+                <div className="presence-list">
+                  {visiblePeople.length === 0 ? <span className="operations-empty">Sem utilizadores correspondentes.</span> : visiblePeople.map((person) => {
+                    const content = <><span className="presence-avatar">{person.avatarUrl ? <img src={person.avatarUrl} alt="" /> : <UserRound size={15} />}</span><span className="presence-identity"><strong>{person.displayName}</strong><small>{ROLE_LABEL[person.role] ?? person.role} · {person.tier ? tierLabel(person.tier) : "sem plano"} · {person.clientVersion ?? "sem versão"}</small></span><span className="presence-signals"><span className={person.siteOnline ? "online" : ""}><Wifi size={11} />Site</span><span className={person.optimizerOnline ? "online" : ""}><Zap size={11} />App</span><small>{relativeTime(Math.max(person.siteSeenAt ?? 0, person.optimizerSeenAt ?? 0, person.lastActivityAt ?? 0) || null)}</small></span></>;
+                    return role === "owner" ? <button key={person.id} className="presence-row" onClick={() => void open(`/panel/admin/users/${person.id}`)} title="Abrir perfil completo">{content}<ExternalLink size={13} /></button> : <div key={person.id} className="presence-row">{content}</div>;
+                  })}
+                </div>
+              </section>
+
+              <section className="operations-panel">
+                <div className="operations-panel-header"><div><strong>Atividade recente</strong><span>Eventos do site e aplicação</span></div><Activity size={15} /></div>
+                <div className="activity-feed">
+                  {overview.activity.length === 0 ? <span className="operations-empty">Ainda não existe atividade.</span> : overview.activity.slice(0, 12).map((entry) => (
+                    <div className="activity-entry" key={entry.id}>
+                      <span className="activity-marker" />
+                      <span><strong>{ACTIVITY_LABELS[entry.action] ?? entry.action.replaceAll("_", " ")}</strong><small>{entry.username}{entry.detail ? ` · ${entry.detail}` : ""}</small></span>
+                      <time>{relativeTime(entry.createdAt)}</time>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+
+            <div className="operations-details">
+              <div><span className="eyebrow">UTILIZAÇÃO · 24H</span>{overview.usage.length ? overview.usage.map((item) => <span className="usage-item" key={item.action}><b>{ACTIVITY_LABELS[item.action] ?? item.action.replaceAll("_", " ")}</b><strong>{item.count}</strong></span>) : <small>Sem utilização registada.</small>}</div>
+              <div><span className="eyebrow">VERSÕES ATIVAS</span>{overview.versions.length ? overview.versions.map((item) => <span className="usage-item" key={item.version}><b>{item.version}</b><strong>{item.count}</strong></span>) : <small>Ainda sem clientes ligados.</small>}</div>
+            </div>
+          </>
+        )}
       </section>
 
       <div className="section-heading"><div><span className="eyebrow">FERRAMENTAS</span><h2>Atalhos da equipa</h2></div><span>{tools.length} disponíveis</span></div>
@@ -617,6 +740,10 @@ function InternalView({ state, profile, settings, notify }: { state: CatalogStat
       </section>
     </PageMotion>
   );
+}
+
+function OperationMetric({ label, value, detail, tone = "default" }: { label: string; value: string; detail: string; tone?: "default" | "good" | "warn" }) {
+  return <div className={`operation-metric ${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>;
 }
 
 function SystemView({ profile, settings }: { profile: SystemProfile | null; settings: LoginSettings }) {

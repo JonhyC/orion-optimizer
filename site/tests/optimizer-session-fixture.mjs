@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 
 const db = new DatabaseSync("../data/orion.sqlite");
 const backupPath = "tests/.optimizer-session-backup.json";
+const tokenKind = process.argv[2] === "api" ? "api" : "web";
 
 if (process.argv[2] === "cleanup") {
   const backup = JSON.parse(fs.readFileSync(backupPath, "utf8"));
@@ -29,6 +30,6 @@ fs.writeFileSync(backupPath, JSON.stringify({
   token_hash: tokenHash,
 }));
 db.prepare("UPDATE users SET client_version = '0.9.0', client_seen_at = ? WHERE id = ?").run(now, user.id);
-db.prepare("INSERT INTO tokens(user_id, token_hash, expires_at, created_at, kind) VALUES(?, ?, ?, ?, 'web')")
-  .run(user.id, tokenHash, now + 1800, now);
+db.prepare("INSERT INTO tokens(user_id, token_hash, expires_at, created_at, kind, last_seen_at) VALUES(?, ?, ?, ?, ?, ?)")
+  .run(user.id, tokenHash, now + 1800, now, tokenKind, now);
 console.log(token);

@@ -69,6 +69,47 @@ type OrionSession = {
   }>;
 };
 
+type InternalOverview = {
+  generatedAt: number;
+  onlineWindowSeconds: number;
+  metrics: {
+    users: number;
+    activeLicenses: number;
+    onlineSite: number;
+    onlineOptimizer: number;
+    failedLogins24h: number;
+    optimizerActions24h: number;
+    catalogRequests24h: number;
+    revenue30Cents: number | null;
+  };
+  people: Array<{
+    id: number;
+    username: string;
+    displayName: string;
+    avatarUrl: string | null;
+    role: string;
+    tier: string | null;
+    status: string;
+    clientVersion: string | null;
+    clientSeenAt: number | null;
+    siteSeenAt: number | null;
+    optimizerSeenAt: number | null;
+    siteOnline: boolean;
+    optimizerOnline: boolean;
+    lastActivityAt: number | null;
+  }>;
+  activity: Array<{
+    id: number;
+    action: string;
+    detail: string | null;
+    createdAt: number;
+    userId: number | null;
+    username: string;
+  }>;
+  usage: Array<{ action: string; count: number }>;
+  versions: Array<{ version: string; count: number }>;
+};
+
 type OrionApi = {
   getSettings(): Promise<{ server: string; username: string }>;
   saveSettings(settings: { server: string; username: string }): Promise<void>;
@@ -89,6 +130,7 @@ type OrionApi = {
   apply(tweak: Tweak): Promise<{ sessionId: string; changes: ChangePreview[] }>;
   sessions(): Promise<OrionSession[]>;
   rollback(session: OrionSession): Promise<unknown[]>;
+  internalOverview(): Promise<InternalOverview>;
   openPortal(pathname: string): Promise<boolean>;
   minimize(): void;
   maximize(): void;

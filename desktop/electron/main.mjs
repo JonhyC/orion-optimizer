@@ -268,6 +268,15 @@ async function api(pathname, init = {}) {
   return data;
 }
 
+async function recordActivity(action, detail) {
+  await api("/api/activity", {
+    method: "POST",
+    body: JSON.stringify({ action, detail: String(detail ?? "").slice(0, 120) }),
+  }).catch((error) => {
+    console.warn(`[orion] activity event failed (${action}):`, error.message);
+  });
+}
+
 async function authorizedTweak(id, revalidate = false) {
   if (!apiToken) throw new Error("A sessao terminou. Inicia sessao novamente.");
   if (revalidate || catalogCache.length === 0) {
@@ -333,22 +342,34 @@ function registerIpc() {
   });
   ipcMain.handle("tweak:preview", async (_event, tweak) => {
     const trusted = await authorizedTweak(tweak?.id);
-    return invokeBridge("preview", { tweak: trusted });
+    const result = await invokeBridge("preview", { tweak: trusted });
+    await recordActivity("optimizer_previewed", trusted.id);
+    return result;
   });
   ipcMain.handle("tweak:apply", async (_event, tweak) => {
     // Revalidar em cada execucao impede que um catalogo ja aberto continue a
     // funcionar depois da licenca expirar ou de a conta ser suspensa.
     const trusted = await authorizedTweak(tweak?.id, true);
-    return invokeBridge("apply", { tweak: trusted }, Number(trusted.layer) >= 1);
+    const result = await invokeBridge("apply", { tweak: trusted }, Number(trusted.layer) >= 1);
+    await recordActivity("optimizer_applied", trusted.id);
+    return result;
   });
   ipcMain.handle("history:list", async () => {
     const result = await invokeBridge("sessions");
     const items = result?.items?.value ?? result?.items;
     return Array.isArray(items) ? items : items ? [items] : [];
   });
-  ipcMain.handle("history:rollback", (_event, session) => {
+  ipcMain.handle("history:rollback", async (_event, session) => {
     const elevated = Array.isArray(session?.entries) && session.entries.some((entry) => entry.hive === "HKLM");
-    return invokeBridge("rollback", { session }, elevated);
+    const result = await invokeBridge("rollback", { session }, elevated);
+    await recordActivity("optimizer_rolled_back", session?.sessionId);
+    return result;
+  });
+  ipcMain.handle("internal:overview", async () => {
+    if (!account || !["staff", "developer", "owner"].includes(account.role)) {
+      throw new Error("Esta area esta disponivel apenas para a equipa Orion.");
+    }
+    return api("/api/internal/overview");
   });
   ipcMain.handle("portal:open", async (_event, pathname) => {
     if (!account) throw new Error("Inicia sessao primeiro.");
@@ -359,7 +380,10 @@ function registerIpc() {
     };
     const allowed = routes[account.role];
     const safePath = String(pathname ?? "");
-    if (!allowed?.has(safePath)) throw new Error("Este atalho nao esta disponivel para o teu cargo.");
+    const userDetail = /^\/panel\/admin\/users\/\d+$/.test(safePath);
+    if (!allowed?.has(safePath) && !(account.role === "owner" && userDetail)) {
+      throw new Error("Este atalho nao esta disponivel para o teu cargo.");
+    }
     const settings = await readSettings();
     await shell.openExternal(new URL(safePath, `${settings.server}/`).toString());
     return true;

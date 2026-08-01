@@ -157,11 +157,12 @@ export function issueToken(
 ): { token: string; expiresAt: number } {
   const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = nowSeconds() + ttl;
+  const issuedAt = nowSeconds();
   const db = getDb();
 
   db.prepare(
-    "INSERT INTO tokens (user_id, token_hash, kind, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
-  ).run(userId, sha256(token), kind, expiresAt, nowSeconds());
+    "INSERT INTO tokens (user_id, token_hash, kind, expires_at, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)",
+  ).run(userId, sha256(token), kind, expiresAt, issuedAt, issuedAt);
 
   db.prepare("DELETE FROM tokens WHERE expires_at < ?").run(nowSeconds());
 
@@ -171,17 +172,23 @@ export function issueToken(
 export function userFromToken(token: string | null, kind: TokenKind = "api"): User | null {
   if (!token) return null;
 
-  const user = getDb()
+  const db = getDb();
+  const tokenHash = sha256(token);
+  const user = db
     .prepare(
       `SELECT u.* FROM tokens t
        JOIN users u ON u.id = t.user_id
        WHERE t.token_hash = ? AND t.kind = ? AND t.expires_at > ?`,
     )
-    .get(sha256(token), kind, nowSeconds()) as User | undefined;
+    .get(tokenHash, kind, nowSeconds()) as User | undefined;
 
   if (!user) return null;
   const access = kind === "api" ? checkOptimizerAccess(user) : checkAccount(user);
-  return access.ok ? user : null;
+  if (!access.ok) return null;
+
+  db.prepare("UPDATE tokens SET last_seen_at = ? WHERE token_hash = ? AND kind = ?")
+    .run(nowSeconds(), tokenHash, kind);
+  return user;
 }
 
 export function revokeToken(token: string): void {

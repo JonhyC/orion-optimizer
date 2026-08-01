@@ -221,6 +221,7 @@ function migrate(d: DatabaseSync): void {
   addColumn(d, "users", "support_lifetime", "INTEGER NOT NULL DEFAULT 0");
   addColumn(d, "users", "client_version", "TEXT");
   addColumn(d, "users", "client_seen_at", "INTEGER");
+  addColumn(d, "tokens", "last_seen_at", "INTEGER");
 
   d.exec(`
     CREATE TABLE IF NOT EXISTS discord_role_sync (
@@ -236,6 +237,8 @@ function migrate(d: DatabaseSync): void {
   addColumn(d, "discord_role_sync", "remove_role_id", "TEXT");
 
   d.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_discord ON users (discord_id)");
+  d.exec("CREATE INDEX IF NOT EXISTS idx_tokens_presence ON tokens (kind, last_seen_at, expires_at)");
+  d.exec("CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log (created_at)");
   d.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_plans_discord_role
           ON plans (discord_role_id) WHERE discord_role_id IS NOT NULL`);
 }

@@ -75,6 +75,22 @@ const mockSource = `
       catalog: async () => ({ tweaks, eligibility: Object.fromEntries(tweaks.map((t) => [t.id, { eligible: true, reason: "" }])), account }),
       preview: async () => [], apply: async () => ({ sessionId: "visual", changes: [] }),
       sessions: async () => [], rollback: async () => [], openPortal: async () => true,
+      internalOverview: async () => ({
+        generatedAt: Math.floor(Date.now() / 1000), onlineWindowSeconds: 300,
+        metrics: { users: 48, activeLicenses: 31, onlineSite: 7, onlineOptimizer: 12, failedLogins24h: 2, optimizerActions24h: 86, catalogRequests24h: 40, revenue30Cents: fixture === "owner" ? 184920 : null },
+        people: [
+          { id: 1, username: "alpha", displayName: "Alpha", avatarUrl: "https://cdn.discordapp.com/embed/avatars/1.png", role: "client", tier: "pro", status: "active", clientVersion: "1.0.1", clientSeenAt: Math.floor(Date.now()/1000)-20, siteSeenAt: Math.floor(Date.now()/1000)-50, optimizerSeenAt: Math.floor(Date.now()/1000)-20, siteOnline: true, optimizerOnline: true, lastActivityAt: Math.floor(Date.now()/1000)-20 },
+          { id: 2, username: "beta", displayName: "Beta", avatarUrl: null, role: "client", tier: "basic", status: "active", clientVersion: "1.0.0", clientSeenAt: Math.floor(Date.now()/1000)-500, siteSeenAt: null, optimizerSeenAt: Math.floor(Date.now()/1000)-500, siteOnline: false, optimizerOnline: false, lastActivityAt: Math.floor(Date.now()/1000)-500 },
+          { id: 3, username: "staff.one", displayName: "Staff One", avatarUrl: null, role: "staff", tier: null, status: "active", clientVersion: "1.0.1", clientSeenAt: Math.floor(Date.now()/1000)-70, siteSeenAt: Math.floor(Date.now()/1000)-70, optimizerSeenAt: null, siteOnline: true, optimizerOnline: false, lastActivityAt: Math.floor(Date.now()/1000)-70 },
+        ],
+        activity: [
+          { id: 1, action: "optimizer_applied", detail: "gpu.hags", createdAt: Math.floor(Date.now()/1000)-20, userId: 1, username: "Alpha" },
+          { id: 2, action: "panel_login_ok", detail: null, createdAt: Math.floor(Date.now()/1000)-70, userId: 3, username: "Staff One" },
+          { id: 3, action: "catalog_served", detail: "8 tweaks", createdAt: Math.floor(Date.now()/1000)-500, userId: 2, username: "Beta" },
+        ],
+        usage: [{ action: "optimizer_applied", count: 52 }, { action: "catalog_served", count: 40 }],
+        versions: [{ version: "1.0.1", count: 18 }, { version: "1.0.0", count: 4 }],
+      }),
       minimize() {}, maximize() {}, close() {},
     };
   })();
@@ -109,7 +125,7 @@ for (const fixture of ["basic", "pro", "ultimate", "special", "staff", "develope
     await sleep(700);
   }
   const state = await send("Runtime.evaluate", {
-    expression: `JSON.stringify({ title: document.querySelector('.page-header h1')?.textContent, cards: document.querySelectorAll('.tweak-card').length, tools: document.querySelectorAll('.internal-tool').length, capabilities: document.querySelectorAll('.capability-row').length, hasStandard: document.body.textContent.includes('Standard'), avatarLoaded: Boolean(document.querySelector('.avatar img')?.complete && document.querySelector('.avatar img')?.naturalWidth), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth })`,
+    expression: `JSON.stringify({ title: document.querySelector('.page-header h1')?.textContent, cards: document.querySelectorAll('.tweak-card').length, tools: document.querySelectorAll('.internal-tool').length, capabilities: document.querySelectorAll('.capability-row').length, operationMetrics: document.querySelectorAll('.operation-metric').length, people: document.querySelectorAll('.presence-row').length, activity: document.querySelectorAll('.activity-entry').length, hasStandard: document.body.textContent.includes('Standard'), avatarLoaded: Boolean(document.querySelector('.avatar img')?.complete && document.querySelector('.avatar img')?.naturalWidth), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth })`,
     returnByValue: true,
   });
   const screenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
