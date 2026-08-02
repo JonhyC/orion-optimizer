@@ -92,7 +92,11 @@ export function touchToken(tokenHash: string): void {
   col()
     .doc(tokenHash)
     .update({ last_seen_at: nowSeconds() })
-    .catch((erro) => {
+    .catch((erro: { code?: number; message?: string }) => {
+      // 5 = NOT_FOUND. Acontece quando o token e revogado entre a leitura
+      // e esta actualizacao - um logout a meio de outro pedido. E o
+      // resultado correcto, nao um erro digno de registo.
+      if (erro?.code === 5) return;
       console.error("[orion] falha a actualizar last_seen_at do token:", erro?.message ?? erro);
     });
 }

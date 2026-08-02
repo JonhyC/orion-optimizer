@@ -6,7 +6,7 @@ import {
   userFromToken,
   WEB_SESSION_TTL,
 } from "./auth.ts";
-import type { User } from "./db.ts";
+import type { User } from "./repo/types.ts";
 
 /**
  * Sessao de browser para o painel.
@@ -28,7 +28,7 @@ export const ROLES = ["member", "client", "staff", "developer", "owner"] as cons
 export type Role = (typeof ROLES)[number];
 
 export async function startSession(userId: number): Promise<void> {
-  const { token, expiresAt } = issueToken(userId, "web", WEB_SESSION_TTL);
+  const { token, expiresAt } = await issueToken(userId, "web", WEB_SESSION_TTL);
   const jar = await cookies();
 
   jar.set(COOKIE, token, {
@@ -43,7 +43,7 @@ export async function startSession(userId: number): Promise<void> {
 export async function endSession(): Promise<void> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
-  if (token) revokeToken(token);
+  if (token) await revokeToken(token);
   jar.delete(COOKIE);
 }
 

@@ -1,22 +1,38 @@
 import crypto from "node:crypto";
-// Extensao .ts explicita: o Node em ESM exige-a, e o bundler do Next resolve
-// na mesma. Sem isto, scripts/admin.ts nao consegue reutilizar este modulo.
-import { getDb, audit, nowSeconds, type User } from "./db.ts";
+import { audit } from "./repo/audit.ts";
+import { countRecentFailures, recordAttempt as gravarTentativa } from "./repo/audit.ts";
+import * as repoTokens from "./repo/tokens.ts";
+import * as repoUsers from "./repo/users.ts";
+import type { TokenKind, User, UserProfile } from "./repo/types.ts";
 
 /**
  * Autenticacao do cliente Windows: passwords, tokens, limite de tentativas
  * e ligacao da licenca a uma maquina.
  *
- * Substitui server/lib/auth.php. Mesmo comportamento, mesmos codigos de erro -
- * os testes PowerShell que existiam continuam a servir para validar isto.
+ * Passou de SQLite para Firestore. A diferenca que se ve no codigo e que
+ * quase tudo aqui e agora assincrono: o Firestore so tem API por rede. A
+ * diferenca que se ve em producao e que a sessao deixa de desaparecer -
+ * o SQLite vivia em /tmp e cada funcao serverless da Vercel tinha o seu,
+ * portanto o token escrito no login nao existia no pedido seguinte.
+ *
+ * O que NAO mudou: as regras, as mensagens de erro e os prazos. Os testes
+ * PowerShell que existiam continuam a servir para validar isto.
  */
 
 export const TOKEN_TTL = 12 * 60 * 60; // 12 horas
 export const MAX_ATTEMPTS = 5;
 export const LOCKOUT_SECONDS = 15 * 60;
 export const BIND_HWID = true;
+export const WEB_SESSION_TTL = 7 * 24 * 60 * 60; // 7 dias
+
+export type { TokenKind };
+
+export function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
 
 // ------------------------------------------------------------- passwords
+// Sem alteracoes: e criptografia pura, nao toca na base de dados.
 
 const SCRYPT_N = 16384;
 const SCRYPT_KEYLEN = 64;
@@ -62,47 +78,41 @@ const DUMMY_HASH = hashPassword("orion-dummy-password-for-timing");
 
 // --------------------------------------------------------- forca bruta
 
-export function isLockedOut(username: string, ip: string): boolean {
-  const since = nowSeconds() - LOCKOUT_SECONDS;
-  const row = getDb()
-    .prepare(
-      `SELECT COUNT(*) AS n FROM login_attempts
-       WHERE username = ? AND ip = ? AND success = 0 AND created_at > ?`,
-    )
-    .get(username, ip, since) as { n: number };
-
-  return row.n >= MAX_ATTEMPTS;
+export async function isLockedOut(username: string, ip: string): Promise<boolean> {
+  const desde = nowSeconds() - LOCKOUT_SECONDS;
+  const falhas = await countRecentFailures(username, ip, desde);
+  return falhas >= MAX_ATTEMPTS;
 }
 
-export function recordAttempt(username: string, ip: string, success: boolean): void {
-  const db = getDb();
-  db.prepare(
-    "INSERT INTO login_attempts (username, ip, success, created_at) VALUES (?, ?, ?, ?)",
-  ).run(username, ip, success ? 1 : 0, nowSeconds());
-
-  if (success) {
-    db.prepare(
-      "DELETE FROM login_attempts WHERE username = ? AND ip = ? AND success = 0",
-    ).run(username, ip);
-  }
+export async function recordAttempt(
+  username: string,
+  ip: string,
+  success: boolean,
+): Promise<void> {
+  await gravarTentativa(username, ip, success);
 }
 
 // ----------------------------------------------------------- credenciais
 
-export function findUser(username: string): User | null {
-  return (getDb().prepare("SELECT * FROM users WHERE username = ?").get(username) as
-    | User
-    | undefined) ?? null;
+export async function findUser(username: string): Promise<User | null> {
+  return repoUsers.findByUsername(username);
 }
 
-export function verifyCredentials(username: string, password: string): User | null {
-  const user = findUser(username);
+export async function findUserById(id: number): Promise<User | null> {
+  return repoUsers.findById(id);
+}
+
+export async function verifyCredentials(
+  username: string,
+  password: string,
+): Promise<User | null> {
+  const user = await findUser(username);
   const hash = user?.password_hash ?? DUMMY_HASH;
   const ok = verifyPassword(password, hash);
   return ok && user ? user : null;
 }
 
-export function checkAccount(user: User): { ok: boolean; reason?: string } {
+export function checkAccount(user: Pick<UserProfile, "status">): { ok: boolean; reason?: string } {
   if (user.status !== "active") {
     return { ok: false, reason: "Conta suspensa. Contacta o administrador." };
   }
@@ -110,7 +120,9 @@ export function checkAccount(user: User): { ok: boolean; reason?: string } {
 }
 
 /** A conta do site pode existir sem uma licenca ativa; o cliente Windows nao. */
-export function checkOptimizerAccess(user: User): { ok: boolean; reason?: string } {
+export function checkOptimizerAccess(
+  user: Pick<UserProfile, "status" | "role" | "expires_at" | "tier">,
+): { ok: boolean; reason?: string } {
   const account = checkAccount(user);
   if (!account.ok) return account;
   if (["staff", "developer", "owner"].includes(user.role)) return { ok: true };
@@ -123,90 +135,80 @@ export function checkOptimizerAccess(user: User): { ok: boolean; reason?: string
   return { ok: true };
 }
 
-/** Primeiro login liga a licenca a maquina; depois disso so essa entra. */
-export function checkHwid(user: User, hwid: string | null): { ok: boolean; reason?: string } {
+/**
+ * Primeiro login liga a licenca a maquina; depois disso so essa entra.
+ *
+ * A verificacao e a gravacao acontecem dentro de uma transaccao no
+ * repositorio: duas maquinas a autenticar-se ao mesmo tempo veriam ambas
+ * o campo vazio e ambas gravariam o seu identificador.
+ */
+export async function checkHwid(
+  user: Pick<UserProfile, "id">,
+  hwid: string | null,
+): Promise<{ ok: boolean; reason?: string }> {
   if (!BIND_HWID) return { ok: true };
   if (!hwid) return { ok: false, reason: "Identificador de maquina em falta." };
 
-  if (!user.hwid) {
-    getDb().prepare("UPDATE users SET hwid = ? WHERE id = ?").run(hwid, user.id);
+  const resultado = await repoUsers.bindHwid(user.id, hwid);
+  if (resultado.bound) {
     audit(user.id, "hwid_bound", hwid.slice(0, 16));
     return { ok: true };
   }
-
-  const a = Buffer.from(user.hwid);
-  const b = Buffer.from(hwid);
-  const same = a.length === b.length && crypto.timingSafeEqual(a, b);
-
-  return same
-    ? { ok: true }
-    : { ok: false, reason: "Esta licenca esta ligada a outro computador." };
+  if (resultado.ok) return { ok: true };
+  return { ok: false, reason: "Esta licenca esta ligada a outro computador." };
 }
 
 // --------------------------------------------------------------- tokens
 
-export type TokenKind = "api" | "web";
-
-export const WEB_SESSION_TTL = 7 * 24 * 60 * 60; // 7 dias
-
 /** Guardamos apenas o SHA-256 do token; o valor original nunca fica em disco. */
-export function issueToken(
+export async function issueToken(
   userId: number,
   kind: TokenKind = "api",
   ttl: number = TOKEN_TTL,
-): { token: string; expiresAt: number } {
-  const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = nowSeconds() + ttl;
-  const issuedAt = nowSeconds();
-  const db = getDb();
-
-  db.prepare(
-    "INSERT INTO tokens (user_id, token_hash, kind, expires_at, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)",
-  ).run(userId, sha256(token), kind, expiresAt, issuedAt, issuedAt);
-
-  db.prepare("DELETE FROM tokens WHERE expires_at < ?").run(nowSeconds());
-
-  return { token, expiresAt };
+): Promise<{ token: string; expiresAt: number }> {
+  return repoTokens.createToken(userId, kind, ttl);
 }
 
-export function userFromToken(token: string | null, kind: TokenKind = "api"): User | null {
+/**
+ * Resolve o utilizador a partir do token.
+ *
+ * Duas leituras: o token pelo hash (id do documento) e depois o
+ * utilizador. Nao dao para paralelizar - so se sabe que utilizador ler
+ * depois de ler o token.
+ */
+export async function userFromToken(
+  token: string | null,
+  kind: TokenKind = "api",
+): Promise<User | null> {
   if (!token) return null;
 
-  const db = getDb();
-  const tokenHash = sha256(token);
-  const user = db
-    .prepare(
-      `SELECT u.* FROM tokens t
-       JOIN users u ON u.id = t.user_id
-       WHERE t.token_hash = ? AND t.kind = ? AND t.expires_at > ?`,
-    )
-    .get(tokenHash, kind, nowSeconds()) as User | undefined;
+  const registo = await repoTokens.findToken(token, kind);
+  if (!registo) return null;
 
+  const user = await repoUsers.findById(registo.user_id);
   if (!user) return null;
-  const access = kind === "api" ? checkOptimizerAccess(user) : checkAccount(user);
-  if (!access.ok) return null;
 
-  db.prepare("UPDATE tokens SET last_seen_at = ? WHERE token_hash = ? AND kind = ?")
-    .run(nowSeconds(), tokenHash, kind);
+  const acesso = kind === "api" ? checkOptimizerAccess(user) : checkAccount(user);
+  if (!acesso.ok) return null;
+
+  // Sem await: serve para saber quem esta online e falhar nisso nunca
+  // pode impedir alguem de entrar.
+  repoTokens.touchToken(registo.token_hash);
   return user;
 }
 
-export function revokeToken(token: string): void {
-  getDb().prepare("DELETE FROM tokens WHERE token_hash = ?").run(sha256(token));
+export async function revokeToken(token: string): Promise<void> {
+  await repoTokens.revokeToken(token);
 }
 
 /** Revoga tudo do utilizador: usado ao suspender a conta ou mudar a password. */
-export function revokeAllTokens(userId: number): void {
-  getDb().prepare("DELETE FROM tokens WHERE user_id = ?").run(userId);
+export async function revokeAllTokens(userId: number): Promise<void> {
+  await repoTokens.revokeAllTokens(userId);
 }
 
 /** Corta apenas o cliente Windows; a sessao do site continua disponivel. */
-export function revokeClientTokens(userId: number): void {
-  getDb().prepare("DELETE FROM tokens WHERE user_id = ? AND kind = 'api'").run(userId);
-}
-
-function sha256(v: string): string {
-  return crypto.createHash("sha256").update(v).digest("hex");
+export async function revokeClientTokens(userId: number): Promise<void> {
+  await repoTokens.revokeClientTokens(userId);
 }
 
 // -------------------------------------------------------------- pedidos

@@ -25,7 +25,7 @@ const CATALOG_PATH =
 
 export async function GET(req: Request) {
   await processExpiredPlans();
-  const user = userFromToken(bearerToken(req));
+  const user = await userFromToken(bearerToken(req));
 
   if (!user) {
     return fail("Sessao invalida ou expirada. Faz login outra vez.", 401, "invalid_token");

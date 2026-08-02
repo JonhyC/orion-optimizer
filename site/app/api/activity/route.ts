@@ -12,7 +12,7 @@ const ALLOWED_ACTIONS = new Set([
 ]);
 
 export async function POST(req: Request) {
-  const user = userFromToken(bearerToken(req));
+  const user = await userFromToken(bearerToken(req));
   if (!user) return fail("Sessao invalida ou expirada.", 401, "invalid_token");
 
   const payload = await body(req);

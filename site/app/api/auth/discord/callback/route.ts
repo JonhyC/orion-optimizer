@@ -56,9 +56,12 @@ export async function GET(req: Request) {
     return back("not_member");
   }
 
-  const role = mapRole(cfg, roleIds ?? []);
-  const tier = mapTier(cfg, roleIds ?? []);
-  const user = upsertDiscordUser(identity, role, tier);
+  // Em paralelo: ambas consultam os mesmos planos.
+  const [role, tier] = await Promise.all([
+    mapRole(cfg, roleIds ?? []),
+    mapTier(cfg, roleIds ?? []),
+  ]);
+  const user = await upsertDiscordUser(identity, role, tier);
 
   if (user.status !== "active") {
     audit(user.id, "discord_login_suspended", identity.username);

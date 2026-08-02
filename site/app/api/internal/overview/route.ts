@@ -12,7 +12,7 @@ const DAY = 86400;
 type CountRow = { n: number };
 
 export async function GET(req: Request) {
-  const actor = userFromToken(bearerToken(req));
+  const actor = await userFromToken(bearerToken(req));
   if (!actor) return fail("Sessao invalida ou expirada.", 401, "invalid_token");
   if (!INTERNAL_ROLES.has(actor.role)) {
     return fail("Sem permissao para consultar a operacao Orion.", 403, "forbidden");

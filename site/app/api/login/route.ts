@@ -9,7 +9,8 @@ import {
   verifyCredentials,
   LOCKOUT_SECONDS,
 } from "@/lib/auth";
-import { audit, getDb } from "@/lib/db";
+import { audit } from "@/lib/repo/audit";
+import { updateProfile } from "@/lib/repo/users";
 import { body, fail, ok, str } from "../_lib/respond";
 import { processExpiredPlans } from "@/lib/plan-expiry";
 import { avatarUrl, discordConfig, refreshDiscordAccess } from "@/lib/discord";
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
     return fail("Utilizador e password sao obrigatorios.", 400, "missing_credentials");
   }
 
-  if (isLockedOut(username, ip)) {
+  if (await isLockedOut(username, ip)) {
     audit(null, "login_lockout", username, ip);
     return fail(
       `Demasiadas tentativas falhadas. Tenta de novo daqui a ${LOCKOUT_SECONDS / 60} minutos.`,
@@ -39,10 +40,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const user = verifyCredentials(username, password);
+  const user = await verifyCredentials(username, password);
 
   if (!user) {
-    recordAttempt(username, ip, false);
+    await recordAttempt(username, ip, false);
     audit(null, "login_failed", username, ip);
     // Mensagem generica: nao revelar se a conta existe.
     return fail("Credenciais invalidas.", 401, "invalid_credentials");
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
   await processExpiredPlans();
 
   // O processador pode ter removido o plano desde a leitura das credenciais.
-  let currentUser = findUser(username);
+  let currentUser = await findUser(username);
   if (!currentUser) {
     return fail("Credenciais invalidas.", 401, "invalid_credentials");
   }
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
   currentUser = discord.user;
 
   if (discord.status === "not_linked") {
-    recordAttempt(username, ip, false);
+    await recordAttempt(username, ip, false);
     audit(currentUser.id, "login_discord_not_linked", null, ip);
     return fail(
       "Conta Discord nao ligada. Liga a conta Discord no painel antes de entrar.",
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
   }
 
   if (discord.status === "not_member" && discordConfig()?.requireGuild) {
-    recordAttempt(username, ip, false);
+    await recordAttempt(username, ip, false);
     audit(currentUser.id, "login_discord_not_member", null, ip);
     return fail(
       "A conta ligada ja nao pertence ao servidor Discord Orion.",
@@ -97,24 +98,25 @@ export async function POST(req: Request) {
 
   const account = checkOptimizerAccess(currentUser);
   if (!account.ok) {
-    recordAttempt(username, ip, false);
+    await recordAttempt(username, ip, false);
     audit(currentUser.id, "login_denied", account.reason, ip);
     return fail(account.reason!, 403, "account_inactive");
   }
 
-  const machine = checkHwid(currentUser, hwid);
+  const machine = await checkHwid(currentUser, hwid);
   if (!machine.ok) {
-    recordAttempt(username, ip, false);
+    await recordAttempt(username, ip, false);
     audit(currentUser.id, "login_hwid_mismatch", machine.reason, ip);
     return fail(machine.reason!, 403, "hwid_mismatch");
   }
 
-  recordAttempt(username, ip, true);
-  const { token, expiresAt } = issueToken(currentUser.id);
+  await recordAttempt(username, ip, true);
+  const { token, expiresAt } = await issueToken(currentUser.id);
   if (clientVersion) {
-    getDb()
-      .prepare("UPDATE users SET client_version = ?, client_seen_at = ? WHERE id = ?")
-      .run(clientVersion, Math.floor(Date.now() / 1000), currentUser.id);
+    await updateProfile(currentUser.id, {
+      client_version: clientVersion,
+      client_seen_at: Math.floor(Date.now() / 1000),
+    });
   }
   audit(currentUser.id, "login_ok", null, ip);
 

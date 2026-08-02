@@ -1,4 +1,6 @@
-import { getDb, nowSeconds, NO_PASSWORD, type User } from "./db.ts";
+import { NO_PASSWORD, type User } from "./repo/types.ts";
+import { findPlanByCode, planDiscordRoleIds, planForRoleIds } from "./repo/plans.ts";
+import { updateProfile, upsertFromDiscord } from "./repo/users.ts";
 
 /**
  * Login por Discord e mapeamento de cargos.
@@ -237,10 +239,17 @@ export type DiscordAccessCheck = {
   detail?: string;
 };
 
-function applyDiscordRoles(user: User, cfg: DiscordConfig, roleIds: string[]): User {
-  const db = getDb();
-  const discordRole = mapRole(cfg, roleIds);
-  const discordTier = mapTier(cfg, roleIds);
+async function applyDiscordRoles(
+  user: User,
+  cfg: DiscordConfig,
+  roleIds: string[],
+): Promise<User> {
+  // Em paralelo: as duas leem os mesmos planos e encadea-las somava uma
+  // ida ao Firestore sem proveito nenhum.
+  const [discordRole, discordTier] = await Promise.all([
+    mapRole(cfg, roleIds),
+    mapTier(cfg, roleIds),
+  ]);
   const nextTier = user.tier_source === "manual" ? user.tier : discordTier;
   const selectedRole = user.role_source === "manual" ? user.role : discordRole;
   const nextRole =
@@ -251,11 +260,7 @@ function applyDiscordRoles(user: User, cfg: DiscordConfig, roleIds: string[]): U
         : selectedRole;
 
   if (nextRole !== user.role || nextTier !== user.tier) {
-    db.prepare("UPDATE users SET role = ?, tier = ? WHERE id = ?").run(
-      nextRole,
-      nextTier,
-      user.id,
-    );
+    await updateProfile(user.id, { role: nextRole, tier: nextTier });
   }
 
   return { ...user, role: nextRole, tier: nextTier };
@@ -301,7 +306,7 @@ export async function refreshDiscordAccess(user: User): Promise<DiscordAccessChe
       return { status: "unavailable", user, detail: "Discord indisponivel." };
     }
 
-    return { status: "not_member", user: applyDiscordRoles(user, cfg, []) };
+    return { status: "not_member", user: await applyDiscordRoles(user, cfg, []) };
   }
 
   if (!response.ok) {
@@ -315,7 +320,7 @@ export async function refreshDiscordAccess(user: User): Promise<DiscordAccessChe
   const member = (await response.json()) as { roles?: string[] };
   return {
     status: "verified",
-    user: applyDiscordRoles(user, cfg, member.roles ?? []),
+    user: await applyDiscordRoles(user, cfg, member.roles ?? []),
   };
 }
 
@@ -327,14 +332,17 @@ export async function refreshDiscordAccess(user: User): Promise<DiscordAccessChe
  * devolve e os restantes nem sao consultados. Sem correspondencia nenhuma,
  * fica cliente.
  */
-export function mapRole(cfg: DiscordConfig, roleIds: string[]): User["role"] {
+export async function mapRole(
+  cfg: DiscordConfig,
+  roleIds: string[],
+): Promise<User["role"]> {
   if (cfg.roleOwner && roleIds.includes(cfg.roleOwner)) return "owner";
   if (cfg.roleDeveloper && roleIds.includes(cfg.roleDeveloper)) return "developer";
   if (cfg.roleStaff && roleIds.includes(cfg.roleStaff)) return "staff";
 
   // Cliente e quem tem um cargo de PLANO. Ter so o cargo de membro nao chega:
   // essa pessoa ainda nao comprou nada e nao tem licenca para ver.
-  if (mapTier(cfg, roleIds) !== null) return "client";
+  if ((await mapTier(cfg, roleIds)) !== null) return "client";
 
   return "member";
 }
@@ -346,17 +354,14 @@ export function mapRole(cfg: DiscordConfig, roleIds: string[]): User["role"] {
  * 'basic', ou ser um cliente sem qualquer poder no site mas com 'ultimate'.
  * Devolve null se nao tiver nenhum cargo de plano.
  */
-export function mapTier(cfg: DiscordConfig, roleIds: string[]): User["tier"] {
-  if (roleIds.length > 0) {
-    const placeholders = roleIds.map(() => "?").join(",");
-    const linked = getDb()
-      .prepare(
-        `SELECT code FROM plans WHERE discord_role_id IN (${placeholders})
-         ORDER BY sort_order DESC, id DESC LIMIT 1`,
-      )
-      .get(...roleIds) as { code: string } | undefined;
-    if (linked) return linked.code;
-  }
+export async function mapTier(
+  cfg: DiscordConfig,
+  roleIds: string[],
+): Promise<User["tier"]> {
+  // O plano de maior sort_order ganha: quem comprou o Basic e depois o
+  // Ultimate tem os dois cargos ao mesmo tempo.
+  const plano = await planForRoleIds(roleIds);
+  if (plano) return plano.code;
 
   // Compatibilidade durante a primeira migracao das variaveis antigas.
   if (cfg.tierUltimate && roleIds.includes(cfg.tierUltimate)) return "ultimate";
@@ -365,12 +370,10 @@ export function mapTier(cfg: DiscordConfig, roleIds: string[]): User["tier"] {
   return null;
 }
 
-function tierRole(cfg: DiscordConfig, tier: string | null): string {
+async function tierRole(cfg: DiscordConfig, tier: string | null): Promise<string> {
   if (tier) {
-    const linked = getDb()
-      .prepare("SELECT discord_role_id FROM plans WHERE code = ?")
-      .get(tier) as { discord_role_id: string | null } | undefined;
-    if (linked?.discord_role_id) return linked.discord_role_id;
+    const plano = await findPlanByCode(tier);
+    if (plano?.discord_role_id) return plano.discord_role_id;
   }
   if (tier === "ultimate") return cfg.tierUltimate;
   if (tier === "pro") return cfg.tierPro;
@@ -413,12 +416,10 @@ export async function syncDiscordPlanRoles(
   const cfg = discordConfig();
   if (!cfg?.botToken) throw new Error("DISCORD_BOT_TOKEN nao configurado");
 
-  const wanted = tierRole(cfg, tier);
-  const databaseRoles = getDb()
-    .prepare("SELECT discord_role_id FROM plans WHERE discord_role_id IS NOT NULL")
-    .all() as Array<{ discord_role_id: string }>;
+  const wanted = await tierRole(cfg, tier);
+  const cargosDePlano = await planDiscordRoleIds();
   const planRoles = Array.from(new Set([
-    ...databaseRoles.map((row) => row.discord_role_id),
+    ...cargosDePlano,
     cfg.tierBasic,
     cfg.tierPro,
     cfg.tierUltimate,
@@ -444,70 +445,25 @@ export function avatarUrl(id: string, avatar: string | null): string | null {
  * caso contrario uma alteracao de cargos no servidor podia tirar-te o acesso
  * de dono ao teu proprio painel.
  */
-export function upsertDiscordUser(
+export async function upsertDiscordUser(
   identity: DiscordIdentity,
   role: User["role"],
   tier: User["tier"],
-): User {
-  const db = getDb();
-
-  const existing = db
-    .prepare("SELECT * FROM users WHERE discord_id = ?")
-    .get(identity.id) as User | undefined;
-
-  if (existing) {
-    // Decisoes manuais do owner ganham ao Discord, incluindo planos privados.
-    const nextRole = existing.role_source === "manual" ? existing.role : role;
-    const nextTier = existing.tier_source === "manual" ? existing.tier : tier;
-    const normalizedRole =
-      nextRole === "client" && !nextTier
-        ? "member"
-        : nextRole === "member" && nextTier
-          ? "client"
-          : nextRole;
-
-    db.prepare(
-      `UPDATE users SET discord_username = ?, discord_avatar = ?, role = ?, tier = ? WHERE id = ?`,
-    ).run(
-      identity.globalName ?? identity.username,
-      identity.avatar,
-      normalizedRole,
-      nextTier,
-      existing.id,
-    );
-
-    return { ...existing, role: normalizedRole, tier: nextTier, discord_avatar: identity.avatar };
-  }
-
-  const username = uniqueUsername(identity.username);
-
-  db.prepare(
-    `INSERT INTO users
-       (username, password_hash, role, tier, role_source, tier_source, status,
-        discord_id, discord_username, discord_avatar, created_at)
-     VALUES (?, ?, ?, ?, 'discord', 'discord', 'active', ?, ?, ?, ?)`,
-  ).run(
-    username,
-    NO_PASSWORD,
+): Promise<User> {
+  // A criacao e a actualizacao acontecem dentro de uma transaccao no
+  // repositorio. Sem isso, dois logins simultaneos da mesma conta Discord
+  // veriam ambos "nao existe" e criariam duas contas para a mesma pessoa.
+  const perfil = await upsertFromDiscord({
+    discordId: identity.id,
+    discordUsername: identity.globalName ?? identity.username,
+    discordAvatar: identity.avatar,
+    usernameBase: identity.username,
     role,
     tier,
-    identity.id,
-    identity.globalName ?? identity.username,
-    identity.avatar,
-    nowSeconds(),
-  );
+  });
 
-  return db.prepare("SELECT * FROM users WHERE discord_id = ?").get(identity.id) as User;
-}
-
-function uniqueUsername(base: string): string {
-  const db = getDb();
-  const clean = base.toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 24) || "user";
-
-  let candidate = clean;
-  let n = 1;
-  while (db.prepare("SELECT id FROM users WHERE username = ?").get(candidate)) {
-    candidate = `${clean}${++n}`;
-  }
-  return candidate;
+  // Contas de Discord nao tem password: o marcador nao parseia como
+  // scrypt$, logo verifyPassword recusa-as sempre ate lhes ser definida
+  // uma a serio pelo painel.
+  return { ...perfil, password_hash: NO_PASSWORD, client_password: null };
 }

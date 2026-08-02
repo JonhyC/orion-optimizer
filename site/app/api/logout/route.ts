@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const token = bearerToken(req);
 
   if (token) {
-    const user = userFromToken(token);
+    const user = await userFromToken(token);
     revokeToken(token);
     if (user) audit(user.id, "logout", null, clientIp(req));
   }

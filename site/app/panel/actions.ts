@@ -52,11 +52,11 @@ export async function loginAction(_prev: unknown, formData: FormData) {
     return { error: "Preenche utilizador e password." };
   }
 
-  if (isLockedOut(username, ip)) {
+  if (await isLockedOut(username, ip)) {
     return { error: `Demasiadas tentativas. Tenta daqui a ${LOCKOUT_SECONDS / 60} minutos.` };
   }
 
-  const user = verifyCredentials(username, password);
+  const user = await verifyCredentials(username, password);
   if (!user) {
     recordAttempt(username, ip, false);
     audit(null, "panel_login_failed", username, ip);
