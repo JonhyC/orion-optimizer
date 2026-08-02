@@ -6,6 +6,6 @@ alguem carregar em actualizar. Linhas com # sao ignoradas.
 
 Limpar depois de publicar.
 
-- Cada jogo tem agora botao individual para aplicar uma otimizacao com pre-visualizacao
-- Nova Otimizacao total aplica todas as recomendacoes compativeis numa sessao reversivel
-- A otimizacao total pede uma unica confirmacao e um unico pedido de administrador quando necessario
+- Removida a otimizacao total em lote dos jogos
+- Cada recomendacao de jogo e aplicada individualmente, com pre-visualizacao e reversao
+- Revisao de seguranca da distribuicao Windows antes de publicar uma nova release

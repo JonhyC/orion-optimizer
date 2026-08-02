@@ -1,6 +1,6 @@
 {
   "name": "orion-optimizer-desktop",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "private": true,
   "description": "Orion Optimizer desktop client for Windows",
   "main": "electron/main.mjs",
@@ -75,9 +75,6 @@
     ],
     "win": {
       "icon": "build/icon.png",
-      "signingHashAlgorithms": [
-        "sha256"
-      ],
       "target": [
         {
           "target": "nsis",
