@@ -1,5 +1,13 @@
 {
-  "version": "1.0.5",
+  "version": "1.0.6",
   "downloadPath": "/downloads/Orion-Optimizer-Setup.exe",
-  "sha256": "3f48c3b1fe9a0c9f7cec195be53b96b4be5f50d40f676ec6d5c29916d4b220e4"
+  "sha256": "3e0da2369d6f2255c891e3dde093311510897923f77cb78c4b9ea58ce0a1b337",
+  "sizeBytes": 108681551,
+  "releasedAt": 1785629465,
+  "notes": [
+    "Tema claro com os contornos e sombras na cor da marca",
+    "Modais deixam de aparecer escuros quando o tema claro esta activo",
+    "Corrigido texto invisivel ao passar o rato sobre botoes secundarios",
+    "Barra de titulo acompanha o tema escolhido"
+  ]
 }

@@ -50,14 +50,28 @@ if (localPublish) {
   await fs.copyFile(sourceSetup, path.join(downloadsDir, "Orion-Optimizer-Setup.exe"));
 }
 
-const sha256 = crypto
-  .createHash("sha256")
-  .update(await fs.readFile(sourceSetup))
-  .digest("hex");
+const setupBytes = await fs.readFile(sourceSetup);
+const sha256 = crypto.createHash("sha256").update(setupBytes).digest("hex");
+
+// Notas da versao: uma linha por alteracao, vindas de NOTAS.md ao lado do
+// package.json. Escrever isto a mao no JSON depois de publicar era o tipo
+// de passo que se esquece - e uma actualizacao sem notas obriga quem a
+// recebe a confiar as cegas.
+const notes = await readNotes();
+
+// minSupported nao e gerado: obrigar toda a gente a actualizar e uma
+// decisao humana, tomada quando uma versao tem um defeito que nao pode
+// ficar em circulacao. Preserva-se o que ja la estiver.
+const anterior = await readExistingManifest();
+
 const release = {
   version: pkg.version,
   downloadPath: localPublish ? "/downloads/Orion-Optimizer-Setup.exe" : downloadUrl,
   sha256,
+  sizeBytes: setupBytes.byteLength,
+  releasedAt: Math.floor(Date.now() / 1000),
+  ...(notes.length ? { notes } : {}),
+  ...(anterior?.minSupported ? { minSupported: anterior.minSupported } : {}),
 };
 await fs.writeFile(
   path.join(site, "config", "optimizer-release.json"),
@@ -70,6 +84,35 @@ console.log(
     ? `Orion Optimizer ${pkg.version} publicado no site local.`
     : `Orion Optimizer ${pkg.version} publicado no GitHub e no site.`,
 );
+
+/**
+ * Le NOTAS.md. SO linhas de lista ("- ..." ou "* ...").
+ *
+ * Exigir o marcador nao e formalidade: sem isso, o texto que explica como
+ * usar o ficheiro entrava no manifesto como se fosse nota de versao - foi
+ * exactamente o que aconteceu a primeira vez.
+ */
+async function readNotes() {
+  try {
+    const bruto = await fs.readFile(path.join(root, "NOTAS.md"), "utf8");
+    return bruto
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => /^[-*]\s+\S/.test(l))
+      .map((l) => l.replace(/^[-*]\s+/, ""))
+      .slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+async function readExistingManifest() {
+  try {
+    return JSON.parse(await fs.readFile(path.join(site, "config", "optimizer-release.json"), "utf8"));
+  } catch {
+    return null;
+  }
+}
 
 function releaseExists() {
   return spawnSync("gh", ["release", "view", tag, "--repo", repository], {
