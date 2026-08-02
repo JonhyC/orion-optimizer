@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('profile','eligibility','preview','apply','sessions','rollback')][string]$Command,
+    [Parameter(Mandatory)][ValidateSet('profile','eligibility','preview','apply','sessions','rollback','games','performance','displays')][string]$Command,
     [Parameter(Mandatory)][string]$PayloadPath,
     [Parameter(Mandatory)][string]$ResultPath,
     [Parameter(Mandatory)][string]$ModulesPath
@@ -22,6 +22,12 @@ try {
     Import-Module (Join-Path $ModulesPath 'OrionJournal.psm1') -Force -Global
     Import-Module (Join-Path $ModulesPath 'OrionEngine.psm1') -Force -Global
     Import-Module (Join-Path $ModulesPath 'OrionApi.psm1') -Force -Global
+    # Jogos, desempenho e ecras sao so de leitura e nao dependem do motor
+    # de tweaks. Se algum faltar, o resto do bridge continua a funcionar.
+    foreach ($opcional in @('OrionGames.psm1', 'OrionPerf.psm1', 'OrionDisplay.psm1')) {
+        $caminho = Join-Path $ModulesPath $opcional
+        if (Test-Path -LiteralPath $caminho) { Import-Module $caminho -Force -Global }
+    }
 
     $payload = Get-Content -LiteralPath $PayloadPath -Raw | ConvertFrom-Json
     $dataDir = if ($payload.dataDir) { [string]$payload.dataDir } else { Join-Path $env:LOCALAPPDATA 'OrionOptimizer' }
@@ -68,6 +74,17 @@ try {
             # O embrulho impede o PowerShell 5.1 de transformar uma lista com
             # uma unica sessao num objeto solto durante ConvertTo-Json.
             Write-Result $true @{ items = $sessions }
+        }
+        'games' {
+            # So leitura: nao passa pelo journal porque nao ha nada para
+            # reverter. Nunca precisa de elevacao.
+            Write-Result $true (Get-OrionGames)
+        }
+        'performance' {
+            Write-Result $true (Get-OrionPerformance)
+        }
+        'displays' {
+            Write-Result $true @{ items = @(Get-OrionDisplays) }
         }
         'rollback' {
             Set-OrionRegistryMode -Mode $(if ($payload.mode -eq 'Real') { 'Real' } else { 'Mock' }) -MockPath $mockPath
