@@ -8,7 +8,8 @@ import * as yaml from "js-yaml";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const site = path.resolve(root, "..", "site");
 const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8"));
-const setupName = `Orion Optimizer Setup ${pkg.version}.exe`;
+const productName = pkg.productName || pkg.build?.productName || "Orion Optimizer 2.0";
+const setupName = `${productName} Setup ${pkg.version}.exe`;
 const sourceSetup = path.join(root, "release", setupName);
 const sourceBlockmap = `${sourceSetup}.blockmap`;
 const sourceManifest = path.join(root, "release", "latest.yml");
@@ -41,7 +42,7 @@ let manifestSetupPath = setupName;
 
 if (!localPublish) {
   if (!releaseExists()) {
-    runGh(["release", "create", tag, "--repo", repository, "--target", "main", "--title", `Orion Optimizer ${pkg.version}`, "--notes", `Release automatica do Orion Optimizer ${pkg.version}.`]);
+    runGh(["release", "create", tag, "--repo", repository, "--target", "main", "--title", `${productName} ${pkg.version}`, "--notes", `Release automatica do ${productName} ${pkg.version}.`]);
   }
   runGh(["release", "upload", tag, sourceSetup, sourceBlockmap, "--repo", repository, "--clobber"]);
   manifestSetupPath = publishedSetupUrl();
@@ -94,8 +95,8 @@ await fs.writeFile(
 
 console.log(
   localPublish
-    ? `Orion Optimizer ${pkg.version} publicado no site local.`
-    : `Orion Optimizer ${pkg.version} publicado no GitHub e no site.`,
+    ? `${productName} ${pkg.version} publicado no site local.`
+    : `${productName} ${pkg.version} publicado no GitHub e no site.`,
 );
 
 /**

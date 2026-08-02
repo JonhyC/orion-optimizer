@@ -1,10 +1,18 @@
 {
-  "version": "1.1.4",
-  "downloadPath": "https://github.com/JonhyC/orion-optimizer/releases/download/v1.1.4/Orion.Optimizer.Setup.1.1.4.exe",
-  "sha256": "1e937ecd543296684d21a348c5023403bfbd0cb3aad8e17a3069bf7ab4f005f3",
-  "sizeBytes": 108695193,
-  "releasedAt": 1785633740,
+  "version": "2.1.1",
+  "downloadPath": "/downloads/Orion-Optimizer-Setup.exe",
+  "sha256": "c82430a08e7fc99f75bbeea7fdea2194310b8bb644cdc14126d0518d969e3592",
+  "sizeBytes": 108624158,
+  "releasedAt": 1785690431,
   "notes": [
-    "Atualizacao 1.1.4 do Orion Optimizer"
+    "Sidebar redesenhada com grupos mais claros e area interna para staff, developer e owner",
+    "Detalhe interno do utilizador mostra a versao instalada do Optimizer",
+    "Painel do site mostra credenciais do cliente Windows num modal sem sair do dashboard",
+    "Owner pode configurar versoes da aplicacao por plano, staff e developer",
+    "Seletor de versoes mostra releases ja publicadas em modal horizontal",
+    "Jogos e desempenho abrem mais rapido com cache local e pre-carregamento apos login",
+    "Refresh manual continua a forcar leitura real do Windows",
+    "Modal dos jogos ganhou perfil visual por jogo com ecra, Hz, modo de janela e arranque pela loja",
+    "Pagina Definicoes remodelada com categorias completas, auto-save local e controlos preparados para futuras funcionalidades"
   ]
 }

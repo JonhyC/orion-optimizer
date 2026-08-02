@@ -51,8 +51,8 @@ export default function Nav({ signedIn = false }: { signedIn?: boolean }) {
         <nav className="mx-auto flex max-w-7xl items-center gap-8 px-6 py-4 md:px-10">
           <a href="#top" className="group flex items-center gap-3">
             <OrionGlyph className="h-9 w-9 transition-transform duration-500 group-hover:rotate-12" />
-            <span className="text-[15px] font-bold tracking-[0.22em] text-white">
-              ORION
+            <span className="text-[15px] font-bold tracking-[0.14em] text-white">
+              ORION 2.0
             </span>
           </a>
 

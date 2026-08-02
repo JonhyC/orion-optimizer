@@ -17,7 +17,7 @@ export default function Spotlight() {
   const sx = useSpring(x, { stiffness: 60, damping: 22, mass: 0.7 });
   const sy = useSpring(y, { stiffness: 60, damping: 22, mass: 0.7 });
 
-  const background = useMotionTemplate`radial-gradient(560px circle at ${sx}px ${sy}px, rgba(139,61,255,0.09), transparent 72%)`;
+  const background = useMotionTemplate`radial-gradient(560px circle at ${sx}px ${sy}px, rgba(214,167,91,0.09), transparent 72%)`;
 
   useEffect(() => {
     if (!hasFinePointer() || prefersReducedMotion()) return;

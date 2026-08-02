@@ -11,20 +11,20 @@ const config: Config = {
       colors: {
         void: "#000000",
         ink: {
-          950: "#04060A",
-          900: "#080B11",
-          850: "#0B0F16",
-          800: "#0F141D",
-          700: "#161C27",
-          600: "#1F2733",
-          500: "#2A3441",
+          950: "#020202",
+          900: "#070707",
+          850: "#0B0B0B",
+          800: "#111111",
+          700: "#1A1A1A",
+          600: "#252525",
+          500: "#333333",
         },
         neon: {
-          DEFAULT: "#8B3DFF",
-          soft: "#B78AFF",
-          bright: "#D5BCFF",
-          deep: "#6422C7",
-          dark: "#35106F",
+          DEFAULT: "#D6A75B",
+          soft: "#E8C37C",
+          bright: "#FFE7B1",
+          deep: "#A8762F",
+          dark: "#5C3A12",
         },
         muted: "#8A94A6",
       },
@@ -33,13 +33,13 @@ const config: Config = {
         display: ["var(--font-display)", "system-ui", "sans-serif"],
       },
       boxShadow: {
-        neon: "0 0 24px -4px rgba(139,61,255,0.55)",
-        "neon-lg": "0 0 60px -12px rgba(139,61,255,0.65)",
+        neon: "0 0 24px -4px rgba(214,167,91,0.45)",
+        "neon-lg": "0 0 60px -12px rgba(214,167,91,0.55)",
         glass: "0 24px 60px -30px rgba(0,0,0,0.9)",
       },
       backgroundImage: {
         "grid-fade":
-          "linear-gradient(to bottom, rgba(139,61,255,0.07) 1px, transparent 1px), linear-gradient(to right, rgba(139,61,255,0.07) 1px, transparent 1px)",
+          "linear-gradient(to bottom, rgba(214,167,91,0.07) 1px, transparent 1px), linear-gradient(to right, rgba(214,167,91,0.07) 1px, transparent 1px)",
       },
       keyframes: {
         "float-y": {

@@ -1,4 +1,4 @@
-# Orion Optimizer — Site
+# Orion Optimizer 2.0 — Site
 
 Site público em Next.js 15 / React 19 / TypeScript / Tailwind, com Framer Motion,
 GSAP, Lenis e Three.js.

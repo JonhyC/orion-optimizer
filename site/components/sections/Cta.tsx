@@ -10,12 +10,11 @@ export default function Cta() {
     <section id="contact" className="relative overflow-hidden">
       <div className="section">
         <Reveal>
-          <div className="glow-border is-active relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-b from-white/[0.05] to-transparent px-8 py-20 text-center backdrop-blur-xl md:px-16">
-            <div
-              aria-hidden
-              className="absolute left-1/2 top-0 h-[400px] w-[700px] -translate-x-1/2 rounded-full blur-[120px]"
-              style={{ background: "radial-gradient(circle, rgba(139,61,255,0.18), transparent 70%)" }}
-            />
+          <div className="glow-border is-active orion-banner-surface relative overflow-hidden rounded-3xl border border-neon/[0.16] px-8 py-20 text-center backdrop-blur-xl md:px-16">
+            <div aria-hidden className="orion-rings -left-40 -top-36 h-[360px] w-[360px] opacity-55" />
+            <div aria-hidden className="orion-rings -right-52 bottom-[-210px] h-[520px] w-[520px] rotate-12 opacity-60" />
+            <div aria-hidden className="orion-dots bottom-8 left-8" />
+            <div aria-hidden className="orion-sheen left-1/2 top-0 w-[520px] -translate-x-1/2" />
 
             <div className="relative">
               <h2 className="mx-auto max-w-3xl text-4xl font-extrabold leading-[1.05] tracking-tight text-gradient md:text-6xl">

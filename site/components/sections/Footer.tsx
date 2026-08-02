@@ -88,7 +88,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-16 flex flex-col items-center justify-between gap-4 border-t border-white/[0.06] pt-8 text-[12.5px] text-white/25 sm:flex-row">
-          <span>&copy; {new Date().getFullYear()} Orion Optimizer. All rights reserved.</span>
+          <span>&copy; {new Date().getFullYear()} Orion Optimizer 2.0. All rights reserved.</span>
           <span>
             Not affiliated with Microsoft. Windows is a trademark of Microsoft
             Corporation.

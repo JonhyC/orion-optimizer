@@ -104,7 +104,7 @@ export default function MagneticButton({
         transition={{ duration: 0.4 }}
         style={{
           background:
-            "radial-gradient(closest-side, rgba(139,61,255,0.35), transparent 70%)",
+            "radial-gradient(closest-side, rgba(214,167,91,0.35), transparent 70%)",
         }}
       />
 

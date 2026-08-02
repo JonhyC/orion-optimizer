@@ -69,6 +69,18 @@ type OrionSession = {
   }>;
 };
 
+type ActiveOptimization = {
+  tweakId: string;
+  name: string;
+  description: string;
+  category: string;
+  impact: string;
+  requiresReboot: boolean;
+  sessionId: string;
+  appliedAt: number;
+  mode: "Real" | "Mock";
+};
+
 type InternalOverview = {
   generatedAt: number;
   onlineWindowSeconds: number;
@@ -97,6 +109,22 @@ type InternalOverview = {
     siteOnline: boolean;
     optimizerOnline: boolean;
     lastActivityAt: number | null;
+    availableOptimizations: Array<{
+      id: string;
+      name: string;
+      category: string;
+      tier: string;
+      requiresReboot: boolean;
+    }>;
+    activeOptimizations: Array<{
+      id: string;
+      tweakId: string;
+      name: string;
+      category: string;
+      appliedAt: number;
+      machine: string | null;
+      clientVersion: string | null;
+    }>;
   }>;
   activity: Array<{
     id: number;
@@ -157,19 +185,21 @@ type OrionPerformance = {
 };
 
 type OrionDisplay = {
-  deviceName: string;
-  displayName: string;
+  id?: string;
+  name?: string;
+  deviceName?: string;
+  displayName?: string;
   primary: boolean;
   attached: boolean;
-  current: { width: number; height: number; refreshRate: number; bitsPerPel: number };
-  modes: Array<{ width: number; height: number; refreshRate: number; bitsPerPel: number }>;
+  current: { width: number; height: number; refreshRate?: number; refreshHz?: number; bitsPerPel?: number };
+  modes: Array<{ width: number; height: number; refreshRate?: number; refreshHz?: number; bitsPerPel?: number }>;
 };
 
 type OrionApi = {
   appVersion(): Promise<string>;
   elevate(): Promise<{ relaunching: boolean; elevated: boolean }>;
-  getSettings(): Promise<{ server: string; username: string }>;
-  saveSettings(settings: { server: string; username: string }): Promise<void>;
+  getSettings(): Promise<{ server: string; username: string; password: string }>;
+  saveSettings(settings: { server: string; username: string; password?: string; remember?: boolean }): Promise<void>;
   login(credentials: {
     username: string;
     password: string;
@@ -185,11 +215,14 @@ type OrionApi = {
   profile(): Promise<SystemProfile>;
   preview(tweak: Tweak): Promise<ChangePreview[]>;
   apply(tweak: Tweak): Promise<{ sessionId: string; changes: ChangePreview[] }>;
+  activeOptimizations(): Promise<ActiveOptimization[]>;
+  clearActiveOptimization(tweakId?: string | null): Promise<ActiveOptimization[]>;
   sessions(): Promise<OrionSession[]>;
   rollback(session: OrionSession): Promise<unknown[]>;
-  games(): Promise<OrionGamesResult>;
-  performance(): Promise<OrionPerformance>;
-  displays(): Promise<{ items: OrionDisplay[] }>;
+  games(options?: { force?: boolean }): Promise<OrionGamesResult>;
+  launchGame(game: OrionGame): Promise<boolean>;
+  performance(options?: { force?: boolean }): Promise<OrionPerformance>;
+  displays(options?: { force?: boolean }): Promise<{ items: OrionDisplay[] }>;
   internalOverview(): Promise<InternalOverview>;
   openPortal(pathname: string): Promise<boolean>;
   minimize(): void;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { BadgePercent, CreditCard, ShieldCheck, WalletCards, X } from "lucide-react";
 import type { PublicPlan } from "@/lib/site-data";
 import PlanCardDisplay from "../plans/PlanCardDisplay";
 import Reveal, { RevealGroup, RevealItem } from "../ui/Reveal";
@@ -14,11 +14,9 @@ export default function Packages({ plans }: { plans: PublicPlan[] }) {
   return (
     <>
     <section id="packages" className="relative overflow-hidden">
-      <div
-        aria-hidden
-        className="absolute left-1/2 top-0 h-[520px] w-[900px] -translate-x-1/2 rounded-full blur-[150px]"
-        style={{ background: "radial-gradient(circle, rgba(139,61,255,0.16), transparent 70%)" }}
-      />
+      <div aria-hidden className="orion-rings -right-72 top-8 h-[560px] w-[560px] rotate-12 opacity-50" />
+      <div aria-hidden className="orion-dots left-0 top-24" />
+      <div aria-hidden className="orion-sheen left-1/2 top-10 w-[360px] -translate-x-1/2" />
 
       <div className="section">
         <Reveal>
@@ -57,10 +55,12 @@ export default function Packages({ plans }: { plans: PublicPlan[] }) {
         </RevealGroup>
 
         <Reveal delay={0.1}>
-          <p className="mt-10 text-center text-[13px] text-white/30">
-            No measurable improvement on your machine? Full refund, and we roll
-            everything back.
-          </p>
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-3 text-[12.5px] text-white/35">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-3 py-2"><CreditCard size={14} />Cartao credito/debito</span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-3 py-2"><WalletCards size={14} />Apple Pay</span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-3 py-2"><ShieldCheck size={14} />PayPal</span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-[var(--chart-1)]/20 bg-[var(--chart-1)]/[0.06] px-3 py-2 text-[var(--chart-1)]"><BadgePercent size={14} />Cupoes ativos no checkout</span>
+          </div>
         </Reveal>
       </div>
     </section>

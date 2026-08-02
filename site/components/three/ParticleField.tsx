@@ -40,8 +40,8 @@ export default function ParticleField({ count = 2600 }: { count?: number }) {
     const colors = new Float32Array(count * 3);
     const scales = new Float32Array(count);
 
-    const near = new THREE.Color("#D5BCFF");
-    const far = new THREE.Color("#6422C7");
+    const near = new THREE.Color("#FFE7B1");
+    const far = new THREE.Color("#A8762F");
 
     for (let i = 0; i < count; i++) {
       // Math.cbrt distribui uniformemente por volume; sem isso as particulas

@@ -529,7 +529,7 @@ switch (command) {
 
   default:
     out("");
-    out("  Orion Optimizer - administracao de contas");
+    out("  Orion Optimizer 2.0 - administracao de contas");
     out("");
     out("    create <user> [--days=30] [--pass=xxx] [--role=client]");
     out("    list");

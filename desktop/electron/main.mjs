@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from "electron";
 import electronUpdater from "electron-updater";
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
@@ -32,6 +32,14 @@ let account = null;
 let cachedProfile = null;
 let catalogCache = [];
 let updateInProgress = false;
+let heartbeatTimer = null;
+const bridgeCache = new Map();
+const bridgeInflight = new Map();
+const CACHE_TTL = {
+  performance: 2_500,
+  games: 120_000,
+  displays: 30_000,
+};
 
 function focusMainWindow() {
   if (!mainWindow) return;
@@ -84,7 +92,7 @@ async function installLatestRelease(updateRequest = {}) {
   if (!app.isPackaged) {
     dialog.showMessageBox({
       type: "info",
-      title: "Orion Optimizer",
+      title: "Orion Optimizer 2.0",
       message: "A atualizacao automatica so esta ativa na aplicacao instalada.",
     });
     return;
@@ -96,12 +104,12 @@ async function installLatestRelease(updateRequest = {}) {
     autoUpdater.setFeedURL({ provider: "generic", url: feedUrl });
     autoUpdater.on("download-progress", (progress) => {
       mainWindow?.setProgressBar(Math.max(0, Math.min(1, progress.percent / 100)));
-      mainWindow?.setTitle(`Orion Optimizer · A atualizar ${Math.round(progress.percent)}%`);
+      mainWindow?.setTitle(`Orion Optimizer 2.0 · A atualizar ${Math.round(progress.percent)}%`);
     });
 
     focusMainWindow();
     mainWindow?.setProgressBar(2);
-    mainWindow?.setTitle("Orion Optimizer · A procurar atualizacao");
+    mainWindow?.setTitle("Orion Optimizer 2.0 · A procurar atualizacao");
     const result = await autoUpdater.checkForUpdates();
     const availableVersion = result?.updateInfo?.version;
     if (!availableVersion || compareVersions(availableVersion, app.getVersion()) <= 0) {
@@ -110,7 +118,7 @@ async function installLatestRelease(updateRequest = {}) {
         throw new Error(`A versao ${expectedVersion} ainda nao esta disponivel no servidor.`);
       }
       mainWindow?.setProgressBar(-1);
-      mainWindow?.setTitle("Orion Optimizer");
+      mainWindow?.setTitle("Orion Optimizer 2.0");
       focusMainWindow();
       return;
     }
@@ -121,9 +129,9 @@ async function installLatestRelease(updateRequest = {}) {
     setImmediate(() => autoUpdater.quitAndInstall(false, true));
   } catch (error) {
     mainWindow?.setProgressBar(-1);
-    mainWindow?.setTitle("Orion Optimizer");
+    mainWindow?.setTitle("Orion Optimizer 2.0");
     dialog.showErrorBox(
-      "Atualizacao do Orion Optimizer",
+      "Atualizacao do Orion Optimizer 2.0",
       error instanceof Error ? error.message : "Nao foi possivel instalar a atualizacao.",
     );
     updateInProgress = false;
@@ -197,26 +205,178 @@ function settingsPath() {
   return path.join(app.getPath("userData"), "settings.json");
 }
 
+function activeOptimizationsPath() {
+  return path.join(app.getPath("userData"), "active-optimizations.json");
+}
+
+function activeScope() {
+  return {
+    username: String(account?.username ?? ""),
+    hwid: String(cachedProfile?.hwid ?? ""),
+  };
+}
+
+function sameActiveScope(item, scope = activeScope()) {
+  return String(item?.username ?? "") === scope.username && String(item?.hwid ?? "") === scope.hwid;
+}
+
+async function readAllActiveOptimizations() {
+  try {
+    const parsed = JSON.parse(await fs.readFile(activeOptimizationsPath(), "utf8"));
+    return Array.isArray(parsed?.items) ? parsed.items : Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeAllActiveOptimizations(items) {
+  await fs.mkdir(path.dirname(activeOptimizationsPath()), { recursive: true });
+  await fs.writeFile(activeOptimizationsPath(), JSON.stringify({ items }, null, 2), "utf8");
+}
+
+async function listActiveOptimizations() {
+  if (!account) return [];
+  cachedProfile ??= await invokeBridge("profile");
+  const scope = activeScope();
+  const items = (await readAllActiveOptimizations())
+    .filter((item) => sameActiveScope(item, scope))
+    .sort((left, right) => Number(right.appliedAt ?? 0) - Number(left.appliedAt ?? 0));
+  await Promise.allSettled(items.map((item) => syncActiveOptimization(item)));
+  return items;
+}
+
+async function markActiveOptimization(tweak, result) {
+  if (!account) return;
+  cachedProfile ??= await invokeBridge("profile");
+  const scope = activeScope();
+  const items = (await readAllActiveOptimizations()).filter((item) => {
+    return !(sameActiveScope(item, scope) && String(item.tweakId) === String(tweak.id));
+  });
+  const item = {
+    ...scope,
+    tweakId: String(tweak.id),
+    name: String(tweak.name ?? tweak.id),
+    description: String(tweak.description ?? ""),
+    category: String(tweak.id ?? "").split(".")[0] || "system",
+    impact: String(tweak.impact ?? ""),
+    requiresReboot: Boolean(tweak.requiresReboot),
+    sessionId: String(result?.sessionId ?? ""),
+    appliedAt: Math.floor(Date.now() / 1000),
+    mode: executionMode,
+  };
+  items.push(item);
+  await writeAllActiveOptimizations(items);
+  await syncActiveOptimization(item);
+}
+
+async function syncActiveOptimization(item) {
+  if (!apiToken || !item?.tweakId) return;
+  cachedProfile ??= await invokeBridge("profile");
+  await api("/api/optimizer/active", {
+    method: "POST",
+    body: JSON.stringify({
+      tweakId: item.tweakId,
+      name: item.name,
+      description: item.description,
+      category: item.category,
+      impact: item.impact,
+      requiresReboot: item.requiresReboot,
+      sessionId: item.sessionId,
+      appliedAt: item.appliedAt,
+      mode: item.mode,
+      clientVersion: app.getVersion(),
+      machine: {
+        hwid: cachedProfile?.hwid ?? item.hwid,
+        chassis: cachedProfile?.chassis ?? null,
+        gpu: cachedProfile?.gpuNames?.join(" + ") || cachedProfile?.gpuVendors?.join(" + ") || cachedProfile?.gpuVendor || null,
+        ramGB: cachedProfile?.ramGB ?? null,
+      },
+    }),
+  }).catch((error) => {
+    console.warn("[orion] active optimization sync failed:", error.message);
+  });
+}
+
+async function removeRemoteActiveOptimization({ tweakId = null, sessionId = null } = {}) {
+  if (!apiToken) return;
+  cachedProfile ??= await invokeBridge("profile");
+  await api("/api/optimizer/active", {
+    method: "DELETE",
+    body: JSON.stringify({
+      tweakId,
+      sessionId,
+      hwid: cachedProfile?.hwid ?? null,
+    }),
+  }).catch((error) => {
+    console.warn("[orion] active optimization removal sync failed:", error.message);
+  });
+}
+
+async function clearActiveOptimization(tweakId = null, sessionId = null) {
+  if (!account) return [];
+  cachedProfile ??= await invokeBridge("profile");
+  const scope = activeScope();
+  const id = tweakId ? String(tweakId) : null;
+  const rollbackSessionId = sessionId ? String(sessionId) : null;
+  const items = (await readAllActiveOptimizations()).filter((item) => {
+    if (!sameActiveScope(item, scope)) return true;
+    if (rollbackSessionId) return String(item.sessionId ?? "") !== rollbackSessionId;
+    if (id) return String(item.tweakId ?? "") !== id;
+    return false;
+  });
+  await writeAllActiveOptimizations(items);
+  await removeRemoteActiveOptimization({ tweakId: id, sessionId: rollbackSessionId });
+  return listActiveOptimizations();
+}
+
+function encryptSetting(value) {
+  const text = String(value ?? "");
+  if (!text) return "";
+  if (!safeStorage.isEncryptionAvailable()) return "";
+  return safeStorage.encryptString(text).toString("base64");
+}
+
+function decryptSetting(value) {
+  const encrypted = String(value ?? "");
+  if (!encrypted || !safeStorage.isEncryptionAvailable()) return "";
+  try {
+    return safeStorage.decryptString(Buffer.from(encrypted, "base64"));
+  } catch {
+    return "";
+  }
+}
+
 async function readSettings() {
   try {
     const stored = JSON.parse(await fs.readFile(settingsPath(), "utf8"));
     return {
       server: typeof stored.server === "string" ? stored.server : "http://localhost:3400",
       username: typeof stored.username === "string" ? stored.username : "",
+      password: decryptSetting(stored.password),
     };
   } catch {
-    return { server: "http://localhost:3400", username: "" };
+    return { server: "http://localhost:3400", username: "", password: "" };
   }
 }
 
 async function saveSettings(next) {
+  const current = await readSettings();
+  const password =
+    typeof next?.password === "string"
+      ? next.password
+      : current.password;
   const safe = {
     server: String(next?.server ?? "http://localhost:3400").replace(/\/$/, ""),
     username: String(next?.username ?? "").slice(0, 80),
+    password: next?.remember === false || !next?.username ? "" : encryptSetting(password),
   };
   await fs.mkdir(path.dirname(settingsPath()), { recursive: true });
   await fs.writeFile(settingsPath(), JSON.stringify(safe, null, 2), "utf8");
-  return safe;
+  return {
+    server: safe.server,
+    username: safe.username,
+    password: safe.password ? password : "",
+  };
 }
 
 function runProcess(file, args) {
@@ -240,7 +400,7 @@ function powerShellString(value) {
 
 async function relaunchElevated() {
   if (process.platform !== "win32") throw new Error("O modo administrador esta disponivel apenas no Windows.");
-  if (!app.isPackaged) throw new Error("Instala o Orion Optimizer para ativares o modo administrador.");
+  if (!app.isPackaged) throw new Error("Instala o Orion Optimizer 2.0 para ativares o modo administrador.");
 
   const profile = await invokeBridge("profile");
   if (profile?.isAdmin) return { relaunching: false, elevated: true };
@@ -319,13 +479,62 @@ async function invokeBridge(command, payload = {}, elevated = false) {
   }
 }
 
-async function api(pathname, init = {}) {
+function bridgeCacheKey(command, payload = {}) {
+  return JSON.stringify([command, payload]);
+}
+
+function clearBridgeCache() {
+  bridgeCache.clear();
+  bridgeInflight.clear();
+}
+
+async function cachedBridge(command, payload = {}, { ttl = 0, force = false, staleWhileRefresh = false } = {}) {
+  const key = bridgeCacheKey(command, payload);
+  const cached = bridgeCache.get(key);
+  const now = Date.now();
+  const fresh = cached && now - cached.at <= ttl;
+
+  if (!force && fresh) return cached.value;
+
+  const run = () => {
+    if (!force && bridgeInflight.has(key)) return bridgeInflight.get(key);
+    const task = invokeBridge(command, payload)
+      .then((value) => {
+        bridgeCache.set(key, { at: Date.now(), value });
+        return value;
+      })
+      .finally(() => bridgeInflight.delete(key));
+    bridgeInflight.set(key, task);
+    return task;
+  };
+
+  if (!force && staleWhileRefresh && cached) {
+    void run().catch((error) => {
+      console.warn(`[orion] ${command} background refresh failed:`, error.message);
+    });
+    return cached.value;
+  }
+
+  return run();
+}
+
+function prewarmDesktopData() {
+  setTimeout(() => {
+    if (!apiToken) return;
+    void cachedBridge("performance", {}, { ttl: CACHE_TTL.performance, force: true }).catch(() => undefined);
+    void cachedBridge("displays", {}, { ttl: CACHE_TTL.displays, force: true }).catch(() => undefined);
+    void cachedBridge("games", {}, { ttl: CACHE_TTL.games, force: true }).catch(() => undefined);
+  }, 150);
+}
+
+async function api(pathname, init = {}, serverOverride = null) {
   const settings = await readSettings();
+  const server = String(serverOverride || settings.server).replace(/\/$/, "");
   const headers = { "Content-Type": "application/json", ...(init.headers ?? {}) };
   if (apiToken) headers.Authorization = `Bearer ${apiToken}`;
   let response;
   try {
-    response = await fetch(`${settings.server}${pathname}`, { ...init, headers });
+    response = await fetch(`${server}${pathname}`, { ...init, headers });
   } catch {
     throw new Error("Nao foi possivel contactar o servidor Orion.");
   }
@@ -341,6 +550,27 @@ async function recordActivity(action, detail) {
   }).catch((error) => {
     console.warn(`[orion] activity event failed (${action}):`, error.message);
   });
+}
+
+function stopHeartbeat() {
+  if (!heartbeatTimer) return;
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+}
+
+function startHeartbeat() {
+  stopHeartbeat();
+  const beat = () => {
+    if (!apiToken) return;
+    api("/api/heartbeat", {
+      method: "POST",
+      body: JSON.stringify({ version: app.getVersion() }),
+    }).catch((error) => {
+      console.warn("[orion] heartbeat failed:", error.message);
+    });
+  };
+  beat();
+  heartbeatTimer = setInterval(beat, 20_000);
 }
 
 async function authorizedTweak(id, revalidate = false) {
@@ -373,10 +603,7 @@ function registerIpc() {
   });
   ipcMain.handle("auth:login", async (_event, credentials) => {
     cachedProfile ??= await invokeBridge("profile");
-    const settings = await saveSettings({
-      server: credentials.server,
-      username: credentials.remember ? credentials.username : "",
-    });
+    const server = String(credentials.server ?? "http://localhost:3400").trim().replace(/\/$/, "");
     const data = await api("/api/login", {
       method: "POST",
       body: JSON.stringify({
@@ -385,16 +612,26 @@ function registerIpc() {
         hwid: cachedProfile.hwid,
         client_version: app.getVersion(),
       }),
+    }, server);
+    const settings = await saveSettings({
+      server,
+      username: credentials.remember ? credentials.username : "",
+      password: credentials.remember ? credentials.password : "",
+      remember: Boolean(credentials.remember),
     });
     apiToken = data.token;
     account = data.user;
+    startHeartbeat();
+    prewarmDesktopData();
     return { user: account, server: settings.server };
   });
   ipcMain.handle("auth:logout", async () => {
     if (apiToken) await api("/api/logout", { method: "POST" }).catch(() => undefined);
+    stopHeartbeat();
     apiToken = null;
     account = null;
     catalogCache = [];
+    clearBridgeCache();
     return true;
   });
   ipcMain.handle("catalog:get", async () => {
@@ -419,9 +656,12 @@ function registerIpc() {
     // funcionar depois da licenca expirar ou de a conta ser suspensa.
     const trusted = await authorizedTweak(tweak?.id, true);
     const result = await invokeBridge("apply", { tweak: trusted }, Number(trusted.layer) >= 1);
+    await markActiveOptimization(trusted, result);
     await recordActivity("optimizer_applied", trusted.id);
     return result;
   });
+  ipcMain.handle("optimizations:active", async () => listActiveOptimizations());
+  ipcMain.handle("optimizations:clear", async (_event, tweakId) => clearActiveOptimization(tweakId));
   ipcMain.handle("history:list", async () => {
     const result = await invokeBridge("sessions");
     const items = result?.items?.value ?? result?.items;
@@ -430,22 +670,51 @@ function registerIpc() {
   ipcMain.handle("history:rollback", async (_event, session) => {
     const elevated = Array.isArray(session?.entries) && session.entries.some((entry) => entry.hive === "HKLM");
     const result = await invokeBridge("rollback", { session }, elevated);
+    await clearActiveOptimization(null, session?.sessionId);
     await recordActivity("optimizer_rolled_back", session?.sessionId);
     return result;
   });
-  ipcMain.handle("games:list", async () => {
+  ipcMain.handle("games:list", async (_event, options = {}) => {
     if (!apiToken) throw new Error("Inicia sessao primeiro.");
-    const result = await invokeBridge("games");
-    await recordActivity("optimizer_games_scanned", "desktop");
+    const result = await cachedBridge("games", {}, {
+      ttl: CACHE_TTL.games,
+      force: Boolean(options?.force),
+      staleWhileRefresh: true,
+    });
+    void recordActivity("optimizer_games_scanned", "desktop");
     return result;
   });
-  ipcMain.handle("performance:snapshot", async () => {
+  ipcMain.handle("performance:snapshot", async (_event, options = {}) => {
     if (!apiToken) throw new Error("Inicia sessao primeiro.");
-    return invokeBridge("performance");
+    return cachedBridge("performance", {}, {
+      ttl: CACHE_TTL.performance,
+      force: Boolean(options?.force),
+      staleWhileRefresh: true,
+    });
   });
-  ipcMain.handle("display:list", async () => {
+  ipcMain.handle("display:list", async (_event, options = {}) => {
     if (!apiToken) throw new Error("Inicia sessao primeiro.");
-    return invokeBridge("displays");
+    return cachedBridge("displays", {}, {
+      ttl: CACHE_TTL.displays,
+      force: Boolean(options?.force),
+      staleWhileRefresh: true,
+    });
+  });
+  ipcMain.handle("game:launch", async (_event, game) => {
+    if (!apiToken) throw new Error("Inicia sessao primeiro.");
+    const launchUri = String(game?.launchUri ?? "").trim();
+    if (!launchUri) throw new Error("Este jogo nao tem atalho de arranque detectado.");
+    let protocol = "";
+    try {
+      protocol = new URL(launchUri).protocol;
+    } catch {
+      if (launchUri.startsWith("shell:")) protocol = "shell:";
+    }
+    const allowedProtocols = new Set(["steam:", "com.epicgames.launcher:", "goggalaxy:", "shell:", "xbox:"]);
+    if (!allowedProtocols.has(protocol)) throw new Error("O atalho deste jogo nao e suportado pelo Orion.");
+    await shell.openExternal(launchUri);
+    void recordActivity("optimizer_game_launched", game?.id ?? "desktop");
+    return true;
   });
   ipcMain.handle("internal:overview", async () => {
     if (!account || !["staff", "developer", "owner"].includes(account.role)) {
@@ -485,11 +754,11 @@ function createWindow() {
     height: 800,
     minWidth: 980,
     minHeight: 650,
-    backgroundColor: "#07090d",
+    backgroundColor: "#030303",
     icon: isDev ? path.resolve(here, "..", "build", "icon.png") : undefined,
     show: false,
     titleBarStyle: "hidden",
-    titleBarOverlay: { color: "#07090d", symbolColor: "#98a2b3", height: 42 },
+    titleBarOverlay: { color: "#030303", symbolColor: "#d9d9d9", height: 42 },
     webPreferences: {
       preload: path.join(here, "preload.cjs"),
       contextIsolation: true,
@@ -526,5 +795,6 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  stopHeartbeat();
   if (process.platform !== "darwin") app.quit();
 });

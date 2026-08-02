@@ -114,7 +114,7 @@ export default function Stats({ stats }: { stats: PublicStats }) {
                   className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
                   style={{
                     background:
-                      "radial-gradient(300px circle at 50% 0%, rgba(139,61,255,0.14), transparent 70%)",
+                      "radial-gradient(300px circle at 50% 0%, rgba(214,167,91,0.14), transparent 70%)",
                   }}
                 />
                 <div className="relative font-mono text-5xl font-extrabold tracking-tighter text-neon md:text-6xl">

@@ -1,8 +1,8 @@
 {
   "name": "orion-optimizer-desktop",
-  "version": "1.1.6",
+  "version": "2.1.1",
   "private": true,
-  "description": "Orion Optimizer desktop client for Windows",
+  "description": "Orion Optimizer 2.0 desktop client for Windows",
   "main": "electron/main.mjs",
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5174 && node electron/launch.cjs\"",
@@ -38,12 +38,12 @@
   },
   "build": {
     "appId": "pt.orionoptimizer.desktop",
-    "productName": "Orion Optimizer",
+    "productName": "Orion Optimizer 2.0",
     "asar": true,
     "forceCodeSigning": true,
     "protocols": [
       {
-        "name": "Orion Optimizer",
+        "name": "Orion Optimizer 2.0",
         "schemes": [
           "orion-optimizer"
         ]
@@ -95,7 +95,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Orion Optimizer",
+      "shortcutName": "Orion Optimizer 2.0",
       "runAfterFinish": true
     }
   }

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
 import ParticleField from "../three/ParticleField";
 import MagneticButton from "../ui/MagneticButton";
+import { OrionGlyph } from "../ui/PageLoader";
 import { DISCORD_URL } from "@/lib/data";
 import { prefersReducedMotion } from "@/lib/utils";
 
@@ -42,32 +43,21 @@ export default function Hero() {
     <section
       id="top"
       ref={ref}
-      className="relative flex min-h-[100svh] items-center overflow-hidden"
+      className="orion-banner-surface relative flex min-h-[100svh] items-center overflow-hidden"
     >
-      {/* fundo */}
-      <div className="absolute inset-0 bg-void" />
       <ParticleField />
 
-      {/* gradientes em movimento */}
-      <motion.div
-        aria-hidden
-        className="absolute -left-1/4 top-0 h-[720px] w-[720px] rounded-full blur-[130px]"
-        style={{ background: "radial-gradient(circle, rgba(0,120,184,0.30), transparent 68%)" }}
-        animate={{ x: [0, 90, 0], y: [0, 60, 0] }}
-        transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        aria-hidden
-        className="absolute -right-1/4 bottom-0 h-[640px] w-[640px] rounded-full blur-[130px]"
-        style={{ background: "radial-gradient(circle, rgba(139,61,255,0.22), transparent 68%)" }}
-        animate={{ x: [0, -70, 0], y: [0, -50, 0] }}
-        transition={{ duration: 26, repeat: Infinity, ease: "easeInOut" }}
-      />
+      <div aria-hidden className="orion-rings orion-rings-left" />
+      <div aria-hidden className="orion-rings orion-rings-right" />
+      <div aria-hidden className="orion-dots bottom-16 left-0" />
+      <div aria-hidden className="orion-sheen left-[8%] top-[44%] w-24" />
+      <div aria-hidden className="orion-sheen right-[6%] top-[62%] w-40 rotate-[-18deg]" />
+      <OrionGlyph className="pointer-events-none absolute left-1/2 top-[14%] h-44 w-44 -translate-x-1/2 opacity-[0.08] drop-shadow-[0_0_30px_rgba(214,167,91,0.28)] md:h-64 md:w-64" />
 
       {/* grelha tecnica */}
       <div
         aria-hidden
-        className="absolute inset-0 bg-grid-fade opacity-[0.35] mask-fade-b animate-grid-drift"
+        className="absolute inset-0 bg-grid-fade opacity-[0.18] mask-fade-b animate-grid-drift"
         style={{ backgroundSize: "64px 64px" }}
       />
 

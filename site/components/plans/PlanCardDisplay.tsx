@@ -1,9 +1,11 @@
 "use client";
 
+import { motion, useReducedMotion } from "framer-motion";
 import { Check, Maximize2, Megaphone, Zap } from "lucide-react";
 import MagneticButton from "../ui/MagneticButton";
 
 export type PlanCardData = {
+  code: string;
   name: string;
   description: string | null;
   price_cents: number;
@@ -29,6 +31,7 @@ export default function PlanCardDisplay({
   preview?: boolean;
   onCoverOpen?: () => void;
 }) {
+  const reduce = useReducedMotion();
   const badge = plan.badge_active === 1 && plan.badge_text ? plan.badge_text : null;
   const featured = badge !== null;
   const discounted = plan.discount_active === 1 &&
@@ -47,7 +50,12 @@ export default function PlanCardDisplay({
   }
 
   return (
-    <div
+    <motion.div
+      initial={reduce ? false : { opacity: 0, y: 18, scale: 0.985 }}
+      whileInView={reduce ? undefined : { opacity: 1, y: 0, scale: 1 }}
+      viewport={{ once: true, margin: "-60px" }}
+      transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={reduce ? undefined : { y: -4 }}
       className={`glow-border relative flex h-full flex-col rounded-2xl border p-8 backdrop-blur-xl ${
         featured
           ? "is-active border-neon/35 bg-gradient-to-b from-neon/[0.09] to-white/[0.02]"
@@ -55,12 +63,18 @@ export default function PlanCardDisplay({
       }`}
     >
       {badge && (
-        <div className="pointer-events-none absolute -top-3.5 left-1/2 z-30 -translate-x-1/2">
+        <motion.div
+          initial={reduce ? false : { opacity: 0, y: 8, scale: 0.96 }}
+          whileInView={reduce ? undefined : { opacity: 1, y: 0, scale: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.45, delay: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          className="pointer-events-none absolute -top-3.5 left-1/2 z-30 -translate-x-1/2"
+        >
           <span className="inline-flex max-w-[min(300px,calc(100vw-3rem))] items-center gap-1.5 rounded-full bg-gradient-to-r from-neon-deep to-neon px-4 py-1.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-void shadow-neon">
             <Zap size={11} />
             <span className="truncate">{badge}</span>
           </span>
-        </div>
+        </motion.div>
       )}
 
       {plan.cover_url && (
@@ -74,7 +88,7 @@ export default function PlanCardDisplay({
           <img
             src={plan.cover_url}
             alt={`Cover for ${plan.name}`}
-            className="h-full w-full object-cover transition-transform duration-700 group-hover/cover:scale-[1.03]"
+            className="h-full w-full object-cover transition-transform duration-[900ms] ease-out group-hover/cover:scale-[1.045]"
           />
           {onCoverOpen && (
             <span className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-md border border-white/15 bg-black/55 text-white/70 opacity-0 backdrop-blur-md transition-opacity group-hover/cover:opacity-100">
@@ -84,10 +98,17 @@ export default function PlanCardDisplay({
         </button>
       )}
 
-      <h3 className="text-xl font-bold tracking-tight text-white">{plan.name}</h3>
-      <p className="mt-1.5 text-[13.5px] leading-relaxed text-white/40">
-        {plan.description || "Orion Optimizer access."}
-      </p>
+      <motion.div
+        initial={reduce ? false : { opacity: 0, y: 10 }}
+        whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.45, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <h3 className="text-xl font-bold tracking-tight text-white">{plan.name}</h3>
+        <p className="mt-1.5 text-[13.5px] leading-relaxed text-white/40">
+          {plan.description || "Orion Optimizer 2.0 access."}
+        </p>
+      </motion.div>
 
       {discounted && plan.promo_text && (
         <div className="mt-5 flex items-start gap-2 border-l-2 border-neon bg-neon/[0.06] px-3 py-2.5 text-[12px] font-medium leading-relaxed text-neon">
@@ -96,7 +117,13 @@ export default function PlanCardDisplay({
         </div>
       )}
 
-      <div className={discounted && plan.promo_text ? "mt-5" : "mt-8"}>
+      <motion.div
+        className={discounted && plan.promo_text ? "mt-5" : "mt-8"}
+        initial={reduce ? false : { opacity: 0, y: 12 }}
+        whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.48, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
+      >
         {discounted && (
           <div className="mb-1.5 flex items-center gap-2 text-[13px] text-white/35">
             <span className="line-through decoration-white/45">
@@ -115,7 +142,7 @@ export default function PlanCardDisplay({
             {(plan.price_cents / 100).toFixed(2)}
           </span>
         </div>
-      </div>
+      </motion.div>
       <div className="mt-1.5 text-[12.5px] text-white/35">
         {plan.days === 0 ? "life-time" : `${plan.days} days`} - no subscription
       </div>
@@ -131,14 +158,21 @@ export default function PlanCardDisplay({
 
       <ul className="flex-1 space-y-3.5">
         {features.map((feature, index) => (
-          <li key={`${feature}-${index}`} className="flex items-start gap-3 text-[14px] text-white/60">
+          <motion.li
+            key={`${feature}-${index}`}
+            initial={reduce ? false : { opacity: 0, x: -8 }}
+            whileInView={reduce ? undefined : { opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.35, delay: 0.16 + index * 0.035, ease: [0.22, 1, 0.36, 1] }}
+            className="flex items-start gap-3 text-[14px] text-white/60"
+          >
             <span className={`mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full ${
               featured ? "bg-neon/20 text-neon" : "bg-white/[0.07] text-white/50"
             }`}>
               <Check size={11} strokeWidth={3} />
             </span>
             <span className="min-w-0 break-words">{feature}</span>
-          </li>
+          </motion.li>
         ))}
       </ul>
 
@@ -156,7 +190,7 @@ export default function PlanCardDisplay({
           </button>
         ) : (
           <MagneticButton
-            href="#contact"
+            href={`/checkout/${plan.code}`}
             variant={featured ? "primary" : "ghost"}
             strength={0.22}
             className="w-full"
@@ -165,6 +199,6 @@ export default function PlanCardDisplay({
           </MagneticButton>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

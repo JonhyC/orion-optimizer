@@ -34,7 +34,7 @@ export default function TiltCard({
   const rotateX = useSpring(rx, spring);
   const rotateY = useSpring(ry, spring);
 
-  const spotlight = useMotionTemplate`radial-gradient(420px circle at ${px}% ${py}%, rgba(139,61,255,0.14), transparent 65%)`;
+  const spotlight = useMotionTemplate`radial-gradient(420px circle at ${px}% ${py}%, rgba(214,167,91,0.14), transparent 65%)`;
 
   const onMove = (e: React.MouseEvent) => {
     if (prefersReducedMotion() || !ref.current) return;

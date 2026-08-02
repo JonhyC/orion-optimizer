@@ -109,8 +109,8 @@ export default function Comparison() {
               <svg viewBox="0 0 560 150" className="mt-7 w-full overflow-visible">
                 <defs>
                   <linearGradient id="cmp-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#8B3DFF" stopOpacity="0.28" />
-                    <stop offset="100%" stopColor="#8B3DFF" stopOpacity="0" />
+                    <stop offset="0%" stopColor="#D6A75B" stopOpacity="0.28" />
+                    <stop offset="100%" stopColor="#D6A75B" stopOpacity="0" />
                   </linearGradient>
                 </defs>
 
@@ -148,14 +148,14 @@ export default function Comparison() {
                 <motion.path
                   d={FLAT}
                   fill="none"
-                  stroke="#8B3DFF"
+                  stroke="#D6A75B"
                   strokeWidth="2.2"
                   strokeLinejoin="round"
                   strokeLinecap="round"
                   initial={{ pathLength: 0 }}
                   animate={inView ? { pathLength: 1 } : {}}
                   transition={{ duration: 1.7, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                  style={{ filter: "drop-shadow(0 0 10px rgba(139,61,255,0.5))" }}
+                  style={{ filter: "drop-shadow(0 0 10px rgba(214,167,91,0.5))" }}
                 />
               </svg>
 
