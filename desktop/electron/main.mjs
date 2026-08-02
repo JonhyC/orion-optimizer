@@ -72,10 +72,14 @@ async function handleProtocolUrl(value) {
     focusMainWindow();
     return;
   }
-  await installLatestRelease(request.searchParams.get("version"));
+  await installLatestRelease({
+    expectedVersion: request.searchParams.get("version"),
+    feedUrl: request.searchParams.get("feed"),
+    downloadUrl: request.searchParams.get("url"),
+  });
 }
 
-async function installLatestRelease(expectedVersion) {
+async function installLatestRelease(updateRequest = {}) {
   if (updateInProgress) return;
   if (!app.isPackaged) {
     dialog.showMessageBox({
@@ -88,11 +92,7 @@ async function installLatestRelease(expectedVersion) {
   updateInProgress = true;
   try {
     const settings = await readSettings();
-    const server = new URL(settings.server);
-    if (server.protocol !== "https:" && !isLocalServer(server)) {
-      throw new Error("O servidor de atualizacoes tem de usar HTTPS.");
-    }
-    const feedUrl = new URL("/downloads/windows/", server).toString();
+    const feedUrl = resolveUpdateFeedUrl(updateRequest, settings.server);
     autoUpdater.setFeedURL({ provider: "generic", url: feedUrl });
     autoUpdater.on("download-progress", (progress) => {
       mainWindow?.setProgressBar(Math.max(0, Math.min(1, progress.percent / 100)));
@@ -105,6 +105,7 @@ async function installLatestRelease(expectedVersion) {
     const result = await autoUpdater.checkForUpdates();
     const availableVersion = result?.updateInfo?.version;
     if (!availableVersion || compareVersions(availableVersion, app.getVersion()) <= 0) {
+      const expectedVersion = updateRequest.expectedVersion;
       if (expectedVersion && compareVersions(expectedVersion, app.getVersion()) > 0) {
         throw new Error(`A versao ${expectedVersion} ainda nao esta disponivel no servidor.`);
       }
@@ -131,6 +132,42 @@ async function installLatestRelease(expectedVersion) {
 
 function isLocalServer(url) {
   return ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+}
+
+function resolveUpdateFeedUrl(updateRequest, savedServer) {
+  if (updateRequest.feedUrl) return normalizeFeedUrl(updateRequest.feedUrl);
+
+  const fromDownload = feedFromDownloadUrl(updateRequest.downloadUrl);
+  if (fromDownload) return fromDownload;
+
+  const server = normalizeUpdateUrl(savedServer);
+  return new URL("/downloads/windows/", server).toString();
+}
+
+function feedFromDownloadUrl(value) {
+  if (!value) return null;
+  const downloadUrl = normalizeUpdateUrl(value);
+  if (downloadUrl.pathname.startsWith("/downloads/windows/")) {
+    return new URL("./", downloadUrl).toString();
+  }
+  if (downloadUrl.pathname.startsWith("/downloads/")) {
+    return new URL("/downloads/windows/", downloadUrl).toString();
+  }
+  return new URL("./", downloadUrl).toString();
+}
+
+function normalizeFeedUrl(value) {
+  const url = normalizeUpdateUrl(value);
+  if (!url.pathname.endsWith("/")) url.pathname = `${url.pathname}/`;
+  return url.toString();
+}
+
+function normalizeUpdateUrl(value) {
+  const url = new URL(String(value ?? ""));
+  if (url.protocol !== "https:" && !isLocalServer(url)) {
+    throw new Error("O servidor de atualizacoes tem de usar HTTPS.");
+  }
+  return url;
 }
 
 function compareVersions(left, right) {

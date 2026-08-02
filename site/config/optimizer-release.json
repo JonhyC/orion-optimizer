@@ -1,13 +1,12 @@
 {
-  "version": "1.1.0",
-  "downloadPath": "/downloads/Orion-Optimizer-Setup.exe",
-  "sha256": "014a219010daf407dd7736f2fa566d60061d16130cea00645aefeabef6a99cc0",
-  "sizeBytes": 108693928,
-  "releasedAt": 1785631550,
+  "version": "1.1.2",
+  "downloadPath": "https://github.com/JonhyC/orion-optimizer/releases/download/v1.1.2/Orion.Optimizer.Setup.1.1.2.exe",
+  "sha256": "c426396ed45b5b88dda6f6c1f8eb19ff34d7cbd2217cb1ca94669d7879fd7176",
+  "sizeBytes": 108694241,
+  "releasedAt": 1785633026,
   "notes": [
-    "Nova area de Jogos com deteccao de Steam, Epic, GOG e Microsoft Store",
-    "Nova area de Desempenho com CPU, memoria, GPU, disco, rede e ecra",
-    "Interface do Optimizer renovada com animacoes, sparklines e cards mais claros",
-    "Versao 1.1.0 preparada para instalacao e atualizacao pelo site"
+    "Corrigido o update pelo site quando o servidor guardado na app aponta para localhost",
+    "O painel descarrega o instalador oficial nas versoes anteriores, sem depender do atualizador antigo",
+    "Futuras atualizacoes automaticas usam o feed enviado pelo site"
   ]
 }

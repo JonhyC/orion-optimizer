@@ -31,6 +31,9 @@ import { compareVersions, formatBytes, timeAgo, updateState } from "@/lib/versio
 
 /** Ao fim disto propoe-se o instalador manual: algo correu mal em silencio. */
 const SEGUNDOS_ATE_ALTERNATIVA = 45;
+// A 1.1.1 foi distribuida com o atualizador antigo em alguns ambientes.
+// Ate a 1.1.2 estar instalada, usar sempre o setup publicado na Release.
+const VERSAO_COM_FEED_DE_UPDATE = "1.1.2";
 
 type Fase = "parado" | "a-atualizar" | "concluida";
 
@@ -52,9 +55,12 @@ export default function OptimizerActions({
   const desactualizado = estado === "disponivel" || estado === "obrigatoria" || estado === "desconhecida";
   const obrigatoria = estado === "obrigatoria";
 
-  // A actualizacao automatica so existe a partir da 1.0.0. Abaixo disso a
-  // unica via e reinstalar por cima.
-  const suportaAuto = Boolean(installedVersion && compareVersions(installedVersion, "1.0.0") >= 0);
+  // Versoes antigas ignoram o feed enviado pelo site e podem tentar ir buscar
+  // o instalador ao servidor guardado localmente. Nelas, o caminho fiavel e o
+  // instalador direto.
+  const suportaAuto = Boolean(
+    installedVersion && compareVersions(installedVersion, VERSAO_COM_FEED_DE_UPDATE) >= 0,
+  );
 
   useEffect(() => setOrigin(window.location.origin), []);
 
@@ -88,7 +94,8 @@ export default function OptimizerActions({
   const hrefAtualizar = useMemo(() => {
     if (!origin) return release.downloadPath;
     const url = new URL(release.downloadPath, origin).toString();
-    const p = new URLSearchParams({ version: release.version, url, sha256: release.sha256 });
+    const feed = new URL("/downloads/windows/", origin).toString();
+    const p = new URLSearchParams({ version: release.version, url, feed, sha256: release.sha256 });
     return `orion-optimizer://update?${p.toString()}`;
   }, [origin, release]);
 

@@ -1,8 +1,8 @@
-version: 1.1.0
+version: 1.1.2
 files:
-  - url: Orion Optimizer Setup 1.1.0.exe
-    sha512: UmX6YzIa4x7RF9WFBH6Ui3Vwz86jGcsD5e8naSj+5hVUoJZ5NWqkUbj/EjnudE5HXN2zHE9CKAWBOwreNS8Wdg==
-    size: 108693928
-path: Orion Optimizer Setup 1.1.0.exe
-sha512: UmX6YzIa4x7RF9WFBH6Ui3Vwz86jGcsD5e8naSj+5hVUoJZ5NWqkUbj/EjnudE5HXN2zHE9CKAWBOwreNS8Wdg==
-releaseDate: '2026-08-02T00:45:45.809Z'
+  - url: https://github.com/JonhyC/orion-optimizer/releases/download/v1.1.2/Orion.Optimizer.Setup.1.1.2.exe
+    sha512: tDm46KRIt6WsO6B+kSvC4rNjuM20BTWCfgOZyy8OQMY7/siWgRrCuXTFggQreaacDNsPnefarp7G8RxeOgSR8Q==
+    size: 108694241
+path: https://github.com/JonhyC/orion-optimizer/releases/download/v1.1.2/Orion.Optimizer.Setup.1.1.2.exe
+sha512: tDm46KRIt6WsO6B+kSvC4rNjuM20BTWCfgOZyy8OQMY7/siWgRrCuXTFggQreaacDNsPnefarp7G8RxeOgSR8Q==
+releaseDate: '2026-08-02T01:06:04.743Z'

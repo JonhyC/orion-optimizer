@@ -17,8 +17,7 @@ const windowsDir = path.join(site, "public", "downloads", "windows");
 const localPublish = process.argv.includes("--local");
 const repository = process.env.ORION_GITHUB_REPOSITORY || "JonhyC/orion-optimizer";
 const tag = `v${pkg.version}`;
-const encodedSetupName = setupName.split(" ").map(encodeURIComponent).join("%20");
-const downloadUrl = `https://github.com/${repository}/releases/download/${tag}/${encodedSetupName}`;
+const setupSize = (await fs.stat(sourceSetup)).size;
 
 for (const file of [sourceSetup, sourceBlockmap, sourceManifest]) {
   await fs.access(file);
@@ -30,16 +29,22 @@ const updateInfo = yaml.load(await fs.readFile(sourceManifest, "utf8"));
 if (!updateInfo || typeof updateInfo !== "object" || !Array.isArray(updateInfo.files)) {
   throw new Error("O latest.yml gerado pelo Electron Builder e invalido.");
 }
-const manifestSetupPath = localPublish ? setupName : downloadUrl;
-for (const file of updateInfo.files) file.url = manifestSetupPath;
-updateInfo.path = manifestSetupPath;
-await fs.writeFile(sourceManifest, yaml.dump(updateInfo, { lineWidth: -1 }), "utf8");
+let manifestSetupPath = setupName;
 
 if (!localPublish) {
   if (!releaseExists()) {
     runGh(["release", "create", tag, "--repo", repository, "--target", "main", "--title", `Orion Optimizer ${pkg.version}`, "--notes", `Release automatica do Orion Optimizer ${pkg.version}.`]);
   }
-  runGh(["release", "upload", tag, sourceSetup, sourceBlockmap, sourceManifest, "--repo", repository, "--clobber"]);
+  runGh(["release", "upload", tag, sourceSetup, sourceBlockmap, "--repo", repository, "--clobber"]);
+  manifestSetupPath = publishedSetupUrl();
+}
+
+for (const file of updateInfo.files) file.url = manifestSetupPath;
+updateInfo.path = manifestSetupPath;
+await fs.writeFile(sourceManifest, yaml.dump(updateInfo, { lineWidth: -1 }), "utf8");
+
+if (!localPublish) {
+  runGh(["release", "upload", tag, sourceManifest, "--repo", repository, "--clobber"]);
 }
 
 await fs.mkdir(windowsDir, { recursive: true });
@@ -66,7 +71,7 @@ const anterior = await readExistingManifest();
 
 const release = {
   version: pkg.version,
-  downloadPath: localPublish ? "/downloads/Orion-Optimizer-Setup.exe" : downloadUrl,
+  downloadPath: localPublish ? "/downloads/Orion-Optimizer-Setup.exe" : manifestSetupPath,
   sha256,
   sizeBytes: setupBytes.byteLength,
   releasedAt: Math.floor(Date.now() / 1000),
@@ -119,6 +124,20 @@ function releaseExists() {
     stdio: "ignore",
     windowsHide: true,
   }).status === 0;
+}
+
+function publishedSetupUrl() {
+  const result = spawnSync("gh", ["release", "view", tag, "--repo", repository, "--json", "assets"], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (result.error || result.status !== 0) {
+    throw new Error("Nao foi possivel ler os assets publicados na GitHub Release.");
+  }
+  const release = JSON.parse(result.stdout);
+  const asset = release.assets.find((item) => item.name.endsWith(".exe") && item.size === setupSize);
+  if (!asset?.url) throw new Error("O instalador publicado nao foi encontrado na GitHub Release.");
+  return asset.url;
 }
 
 function runGh(args) {
