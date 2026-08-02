@@ -140,20 +140,29 @@ export async function countUsers(): Promise<number> {
 /**
  * Contagens da pagina publica.
  *
- * Usa aggregation queries: devolvem so o numero, sem trazer os documentos.
- * O Firestore cobra uma leitura por cada 1000 documentos varridos em vez
- * de uma por documento - e isto corre em cada visita a pagina inicial.
+ * UMA query, contada em memoria. A versao anterior fazia duas aggregation
+ * queries, a segunda com `where("hwid", "!=", null)` - e isso exigia um
+ * indice composto (role, hwid) que nao existia. A pagina inicial rebentava
+ * com FAILED_PRECONDITION e levava o site inteiro atras.
  *
- * As duas contagens vao em paralelo por serem independentes.
+ * Alem do indice em falta, o `!=` do Firestore tem semantica traicoeira:
+ * exclui tambem os documentos onde o campo nem sequer existe, o que aqui
+ * dava o resultado certo por acidente e nao por desenho.
+ *
+ * Ler os clientes e contar em memoria evita as duas armadilhas. Sao
+ * poucas contas; quando forem muitas, a saida e um contador mantido a
+ * cada alteracao, nao uma query mais complicada.
  */
 export async function countClients(): Promise<{ total: number; comMaquina: number }> {
-  const [total, comMaquina] = await Promise.all([
-    col().where("role", "==", "client").count().get(),
+  const snap = await col().where("role", "==", "client").get();
+
+  let comMaquina = 0;
+  for (const doc of snap.docs) {
     // "PCs optimizados" = licencas que chegaram a ligar-se a uma maquina.
     // Contar encomendas seria inflacionar: uma renovacao nao e um PC novo.
-    col().where("role", "==", "client").where("hwid", "!=", null).count().get(),
-  ]);
-  return { total: total.data().count, comMaquina: comMaquina.data().count };
+    if (doc.get("hwid")) comMaquina++;
+  }
+  return { total: snap.size, comMaquina };
 }
 
 // ------------------------------------------------------------------ escrita

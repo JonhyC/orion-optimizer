@@ -81,15 +81,30 @@ function toPublic(row: Record<string, unknown>): PublicPlan {
 }
 
 async function fromFirestore(): Promise<PublicPlan[]> {
-  // Precisa do indice composto (active, sort_order) declarado em
-  // firestore.indexes.json. Sem ele o Firestore recusa a query.
-  const snap = await firestore()
-    .collection("plans")
-    .where("active", "==", true)
-    .orderBy("sort_order")
-    .get();
+  // Le TODOS e filtra em memoria, em vez de where("active","==",true).
+  //
+  // O campo `active` existe nos documentos ora como numero 1 ora como
+  // booleano true, conforme quem o escreveu: a migracao gravou booleano,
+  // o repositorio grava numero. Uma query por igualdade so apanha uma das
+  // formas - e a pagina de precos aparecia VAZIA porque procurava `true`
+  // onde estava `1`.
+  //
+  // Filtrar em memoria e imune as duas formas, dispensa o indice composto,
+  // e nao custa nada: sao meia duzia de planos.
+  const snap = await firestore().collection("plans").get();
 
-  return snap.docs.map((d) => toPublic({ ...d.data(), id: d.data().id ?? Number(d.id) }));
+  // Filtrar e ordenar sobre os dados crus: o toPublic() nao devolve
+  // `active` nem `sort_order` - sao campos internos que a pagina publica
+  // nao precisa de conhecer.
+  return snap.docs
+    .map((d) => ({ ...d.data(), id: d.data().id ?? Number(d.id) }) as Record<string, unknown>)
+    .filter((row) => flag(row.active) === 1)
+    .sort(
+      (a, b) =>
+        Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0) ||
+        Number(a.id) - Number(b.id),
+    )
+    .map(toPublic);
 }
 
 function fromSqlite(): PublicPlan[] {

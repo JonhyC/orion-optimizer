@@ -19,8 +19,28 @@ export type PublicReview = {
   body: string;
 };
 
+/**
+ * Executa uma leitura publica sem deixar que uma falha derrube a pagina.
+ *
+ * A pagina inicial e publica e nao depende destes numeros para existir. Um
+ * problema de rede momentaneo ate ao Firestore - basta um `14 UNAVAILABLE`
+ * do gRPC - fazia o Next devolver 500 e o site inteiro ficava em branco.
+ *
+ * Falhar em silencio nao seria melhor: o erro e registado. O que muda e
+ * que a seccao afectada mostra o estado vazio, que ja existe e e honesto,
+ * em vez de levar tudo atras.
+ */
+async function tolerante<T>(nome: string, ler: () => Promise<T>, aoFalhar: T): Promise<T> {
+  try {
+    return await ler();
+  } catch (erro) {
+    console.error(`[orion] ${nome} indisponivel:`, (erro as Error)?.message ?? erro);
+    return aoFalhar;
+  }
+}
+
 export async function publishedReviews(limit = 12): Promise<PublicReview[]> {
-  const aprovadas = await approvedReviews(limit);
+  const aprovadas = await tolerante("avaliacoes", () => approvedReviews(limit), []);
   // So os campos que a pagina publica mostra: nao expor user_id nem o
   // estado de aprovacao a quem nao esta autenticado.
   return aprovadas.map((r) => ({
@@ -44,8 +64,13 @@ export type PublicStats = {
 };
 
 export async function publicStats(): Promise<PublicStats> {
-  // Independentes: em paralelo poupa uma ida ao Firestore.
-  const [clientes, avaliacoes] = await Promise.all([countClients(), reviewStats()]);
+  // Independentes: em paralelo poupa uma ida ao Firestore. Cada uma cai
+  // para zero por si - uma falha nas avaliacoes nao deve esconder o
+  // numero de clientes, nem o contrario.
+  const [clientes, avaliacoes] = await Promise.all([
+    tolerante("contagem de clientes", countClients, { total: 0, comMaquina: 0 }),
+    tolerante("estatisticas de avaliacoes", reviewStats, { count: 0, avg: 0 }),
+  ]);
 
   // Uma conta registada nao prova nada - e um formulario preenchido. So ha
   // prova quando alguem chegou a ligar uma maquina ou deixou avaliacao.
