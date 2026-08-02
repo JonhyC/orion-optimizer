@@ -1,4 +1,5 @@
-import { getDb, nowSeconds } from "./db.ts";
+import { approvedReviews, reviewStats } from "./repo/reviews.ts";
+import { countClients } from "./repo/users.ts";
 
 /**
  * Dados publicos do site, lidos da base de dados.
@@ -18,16 +19,19 @@ export type PublicReview = {
   body: string;
 };
 
-export function publishedReviews(limit = 12): PublicReview[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT id, author_name, handle, rig, gain, rating, body
-       FROM reviews WHERE approved = 1
-       ORDER BY created_at DESC LIMIT ?`,
-    )
-    .all(limit) as PublicReview[];
-
-  return rows.map((row) => ({ ...row }));
+export async function publishedReviews(limit = 12): Promise<PublicReview[]> {
+  const aprovadas = await approvedReviews(limit);
+  // So os campos que a pagina publica mostra: nao expor user_id nem o
+  // estado de aprovacao a quem nao esta autenticado.
+  return aprovadas.map((r) => ({
+    id: r.id,
+    author_name: r.author_name,
+    handle: r.handle,
+    rig: r.rig,
+    gain: r.gain,
+    rating: r.rating,
+    body: r.body,
+  }));
 }
 
 export type PublicStats = {
@@ -39,36 +43,21 @@ export type PublicStats = {
   empty: boolean;
 };
 
-export function publicStats(): PublicStats {
-  const db = getDb();
-
-  const clients = (
-    db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'client'").get() as { n: number }
-  ).n;
-
-  // "PCs optimizados" = licencas que chegaram a ligar-se a uma maquina.
-  // Contar encomendas seria inflacionar: uma renovacao nao e um PC novo.
-  const optimizedPCs = (
-    db
-      .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'client' AND hwid IS NOT NULL")
-      .get() as { n: number }
-  ).n;
-
-  const r = db
-    .prepare("SELECT COUNT(*) AS n, AVG(rating) AS avg FROM reviews WHERE approved = 1")
-    .get() as { n: number; avg: number | null };
+export async function publicStats(): Promise<PublicStats> {
+  // Independentes: em paralelo poupa uma ida ao Firestore.
+  const [clientes, avaliacoes] = await Promise.all([countClients(), reviewStats()]);
 
   // Uma conta registada nao prova nada - e um formulario preenchido. So ha
   // prova quando alguem chegou a ligar uma maquina ou deixou avaliacao.
   // Sem isso a seccao mostra as garantias: "0 PCs optimizados" em destaque
   // e pior do que nao mostrar numero nenhum.
-  const hasProof = optimizedPCs > 0 || r.n > 0;
+  const hasProof = clientes.comMaquina > 0 || avaliacoes.count > 0;
 
   return {
-    clients,
-    optimizedPCs,
-    reviewCount: r.n,
-    averageRating: r.avg,
+    clients: clientes.total,
+    optimizedPCs: clientes.comMaquina,
+    reviewCount: avaliacoes.count,
+    averageRating: avaliacoes.count > 0 ? avaliacoes.avg : null,
     empty: !hasProof,
   };
 }
@@ -79,5 +68,5 @@ export { activePlans } from "./plans.ts";
 export type { PublicPlan } from "./plans.ts";
 
 export function nowTs(): number {
-  return nowSeconds();
+  return Math.floor(Date.now() / 1000);
 }

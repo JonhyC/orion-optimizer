@@ -25,7 +25,7 @@ export default function MachineBinding({
         <div>
           <div className="text-[13.5px] font-semibold text-white/70">Pronta para associar</div>
           <p className="mt-1 text-[12.5px] leading-relaxed text-white/35">
-            Inicia sessao no Orion Optimizer no computador novo. A licenca fica ligada automaticamente a esse PC.
+            Inicia sessao no Orion Optimizer 2.0 no computador novo. A licenca fica ligada automaticamente a esse PC.
           </p>
         </div>
       </div>

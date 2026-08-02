@@ -20,8 +20,11 @@ import { getDb, nowSeconds, NO_PASSWORD } from "@/lib/db";
 import { processExpiredPlans } from "@/lib/plan-expiry";
 import { requireUser, roleAtLeast } from "@/lib/session";
 import { dateTime, money, ordersForUser } from "@/lib/stats";
-import { optimizerRelease } from "@/lib/optimizer-release";
+import { optimizerRelease, releaseForPlan, updateStatus } from "@/lib/optimizer-release";
+import { findAppVersionTarget } from "@/lib/repo/app-versions";
+import { findPlanByCode } from "@/lib/repo/plans";
 import OptimizerActions from "../OptimizerActions";
+import CredentialsModalButton from "./CredentialsModalButton";
 
 export const dynamic = "force-dynamic";
 
@@ -33,12 +36,14 @@ type PersonalPlan = {
   days: number;
   support_days: number | null;
   cover_url: string | null;
+  app_version: string | null;
+  app_min_supported: string | null;
 };
 
 type ActivityRow = { action: string; created_at: number };
 
 const ACTIVITY_LABEL: Record<string, string> = {
-  login_ok: "Sessao iniciada no Orion Optimizer",
+  login_ok: "Sessao iniciada no Orion Optimizer 2.0",
   login_discord_verified: "Cargos Discord verificados",
   catalog_served: "Catalogo de otimizacoes carregado",
   hwid_bound: "Computador associado a licenca",
@@ -52,7 +57,7 @@ const ACTIVITY_LABEL: Record<string, string> = {
 export default async function PersonalDashboardPage() {
   await processExpiredPlans();
   const user = await requireUser();
-  const release = optimizerRelease();
+  const baseRelease = optimizerRelease();
   const now = nowSeconds();
   const internalAccess = roleAtLeast(user, "staff");
   const activePlan = Boolean(
@@ -63,12 +68,14 @@ export default async function PersonalDashboardPage() {
 
   const db = getDb();
   const plan = user.tier
-    ? (db.prepare(
-        `SELECT name, description, price_cents, currency, days, support_days, cover_url
-         FROM plans WHERE code = ?`,
-      ).get(user.tier) as PersonalPlan | undefined)
+    ? ((await findPlanByCode(user.tier)) as PersonalPlan | null) ?? undefined
     : undefined;
-  const orders = ordersForUser(user.id);
+  const roleRelease = !plan && (user.role === "staff" || user.role === "developer")
+    ? await findAppVersionTarget(`role:${user.role}`)
+    : null;
+  const release = releaseForPlan(baseRelease, plan ?? roleRelease);
+  const updater = updateStatus(release, user.client_version);
+  const orders = await ordersForUser(user.id);
   const paidOrders = orders.filter((order) => order.status === "paid");
   const totalSpent = paidOrders.reduce((sum, order) => sum + order.amount_cents, 0);
   const activity = db.prepare(
@@ -94,28 +101,39 @@ export default async function PersonalDashboardPage() {
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-5">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--chart-1)]">
-            Area pessoal
+      <div className={updater.outdated ? "relative" : "grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start"}>
+        <div className="min-w-0">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--chart-1)]">
+              Area pessoal
+            </div>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-white">Dashboard</h1>
+            <p className="mt-1.5 text-[14px] text-white/40">
+              Bem-vindo, {user.discord_username ?? user.username}. Aqui tens o resumo do teu acesso Orion.
+            </p>
           </div>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-white">Dashboard</h1>
-          <p className="mt-1.5 text-[14px] text-white/40">
-            Bem-vindo, {user.discord_username ?? user.username}. Aqui tens o resumo do teu acesso Orion.
-          </p>
-        </div>
-        <OptimizerActions installedVersion={user.client_version} release={release} />
-      </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Plano atual" value={planName} foot={user.tier ?? "acesso por cargo"} />
-        <StatTile label="Licenca" value={licenseText} foot="acesso ativo" />
-        <StatTile label="Support Plan" value={supportText} foot={supportText === "Nao incluido" ? "sem cobertura ativa" : "cobertura ativa"} />
-        <StatTile
-          label="Compras"
-          value={String(paidOrders.length)}
-          foot={paidOrders.length ? `${money(totalSpent)} investidos` : "nenhuma compra registada"}
-        />
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatTile label="Plano atual" value={planName} foot={user.tier ?? "acesso por cargo"} />
+            <StatTile label="Licenca" value={licenseText} foot="acesso ativo" />
+            <StatTile label="Support Plan" value={supportText} foot={supportText === "Nao incluido" ? "sem cobertura ativa" : "cobertura ativa"} />
+            <StatTile
+              label="Compras"
+              value={String(paidOrders.length)}
+              foot={paidOrders.length ? `${money(totalSpent)} investidos` : "nenhuma compra registada"}
+            />
+          </div>
+        </div>
+
+        <aside
+          className={
+            updater.outdated
+              ? "mt-5 min-w-0 lg:fixed lg:bottom-5 lg:right-5 lg:z-50 lg:mt-0 lg:w-[360px] lg:drop-shadow-2xl"
+              : "min-w-0 lg:sticky lg:top-24"
+          }
+        >
+          <OptimizerActions installedVersion={user.client_version} release={release} dismissible={updater.outdated} />
+        </aside>
       </div>
 
       <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[1.2fr_0.8fr]">
@@ -135,7 +153,7 @@ export default async function PersonalDashboardPage() {
                 <StatusBadge status="active" />
               </div>
               <p className="mt-2 text-[13px] leading-5 text-white/40">
-                {plan?.description ?? "Acesso interno ao Orion Optimizer e ao catalogo de otimizacoes."}
+                {plan?.description ?? "Acesso interno ao Orion Optimizer 2.0 e ao catalogo de otimizacoes."}
               </p>
               <div className="mt-4 grid gap-2 text-[12.5px] text-white/45 sm:grid-cols-2">
                 <span className="flex items-center gap-2"><CalendarDays size={14} />Licenca: {licenseText}</span>
@@ -152,7 +170,13 @@ export default async function PersonalDashboardPage() {
             <AccessCheck icon={<UserRound size={15} />} label="Conta Orion ativa" ready={user.status === "active"} />
             <AccessCheck icon={<MessageCircle size={15} />} label="Discord ligado" ready={Boolean(user.discord_id)} />
             <AccessCheck icon={<HardDrive size={15} />} label="Computador associado" ready={Boolean(user.hwid)} optional="feito no primeiro login" />
-            <AccessCheck icon={<KeyRound size={15} />} label="Credenciais Windows" ready={user.password_hash !== NO_PASSWORD} optional="gerir na conta" />
+            <AccessCheck
+              icon={<KeyRound size={15} />}
+              label="Credenciais Windows"
+              ready={user.password_hash !== NO_PASSWORD}
+              optional="gerir na conta"
+              action={<CredentialsModalButton username={user.username} password={user.client_password} hasPassword={user.password_hash !== NO_PASSWORD} />}
+            />
           </div>
           <Link href="/panel" className="mt-5 inline-flex items-center gap-2 text-[12.5px] font-semibold text-[var(--chart-1)] hover:underline">
             Gerir perfil e credenciais
@@ -201,11 +225,13 @@ function AccessCheck({
   label,
   ready,
   optional,
+  action,
 }: {
   icon: React.ReactNode;
   label: string;
   ready: boolean;
   optional?: string;
+  action?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3 text-[12.5px]">
@@ -214,6 +240,7 @@ function AccessCheck({
       <span className={`inline-flex items-center gap-1.5 ${ready ? "text-[var(--good)]" : "text-white/25"}`}>
         {ready ? <><Check size={13} />Pronto</> : optional ?? "Pendente"}
       </span>
+      {action}
     </div>
   );
 }

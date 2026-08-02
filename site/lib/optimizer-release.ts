@@ -36,12 +36,30 @@ export type OptimizerRelease = {
   sizeBytes?: number;
 };
 
+export type PlanReleaseOverride = {
+  app_version?: string | null;
+  app_min_supported?: string | null;
+};
+
 const RELEASE_PATH = path.join(process.cwd(), "config", "optimizer-release.json");
 
 export function optimizerRelease(): OptimizerRelease {
   const value: unknown = JSON.parse(fs.readFileSync(RELEASE_PATH, "utf8"));
   if (!isRelease(value)) throw new Error("Manifesto da aplicacao Orion invalido.");
   return value;
+}
+
+export function releaseForPlan(
+  base: OptimizerRelease,
+  plan: PlanReleaseOverride | null | undefined,
+): OptimizerRelease {
+  const version = plan?.app_version?.trim();
+  const minSupported = plan?.app_min_supported?.trim();
+  return {
+    ...base,
+    version: version && SEMVER.test(version) ? version : base.version,
+    minSupported: minSupported && SEMVER.test(minSupported) ? minSupported : base.minSupported,
+  };
 }
 
 function isRelease(value: unknown): value is OptimizerRelease {

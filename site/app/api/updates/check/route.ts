@@ -1,4 +1,7 @@
-import { optimizerRelease, updateStatus } from "@/lib/optimizer-release";
+import { bearerToken, userFromToken } from "@/lib/auth";
+import { optimizerRelease, releaseForPlan, updateStatus } from "@/lib/optimizer-release";
+import { findAppVersionTarget } from "@/lib/repo/app-versions";
+import { findPlanByCode } from "@/lib/repo/plans";
 import { fail, ok } from "../../_lib/respond";
 
 export const runtime = "nodejs";
@@ -28,6 +31,12 @@ export async function GET(req: Request) {
     return fail("Manifesto de versao indisponivel.", 503, "release_unavailable");
   }
 
+  const user = await userFromToken(bearerToken(req));
+  const plan = user?.tier ? await findPlanByCode(user.tier) : null;
+  const roleTarget = user && !plan && (user.role === "staff" || user.role === "developer")
+    ? await findAppVersionTarget(`role:${user.role}`)
+    : null;
+  release = releaseForPlan(release, plan ?? roleTarget);
   const status = updateStatus(release, pedido);
 
   return ok({

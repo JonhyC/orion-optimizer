@@ -196,7 +196,7 @@ function migrate(d: DatabaseSync): void {
     const update = d.prepare("UPDATE plans SET features_json = ?, cta_text = ? WHERE id = ?");
     for (const plan of plans) {
       const features = defaultFeatures[plan.code] ?? [
-        "Orion Optimizer access",
+        "Orion Optimizer 2.0 access",
         "System restore point first",
         "Full rollback included",
       ];

@@ -11,7 +11,11 @@ import {
   verifyCredentials,
   LOCKOUT_SECONDS,
 } from "@/lib/auth";
-import { audit, getDb, nowSeconds } from "@/lib/db";
+import { audit, lastAuditFor } from "@/lib/repo/audit";
+import { setReviewApproved } from "@/lib/repo/reviews";
+// Vem do repositorio de tokens e nao do db.ts: e a mesma funcao de sempre,
+// so que sem arrastar o node:sqlite atras dela.
+import { nowSeconds } from "@/lib/repo/tokens";
 import {
   endSession,
   requireRole,
@@ -35,6 +39,20 @@ import {
   ensurePlanCoversDirectory,
   planCoversDir,
 } from "@/lib/storage-paths";
+import { allPlans, createPlan, deletePlan, findPlanByCode, findPlanById, updatePlan } from "@/lib/repo/plans";
+import { findOrder, listAllOrders, updateOrder } from "@/lib/repo/orders";
+import { createCoupon, normalizeCouponCode, updateCoupon } from "@/lib/repo/coupons";
+import { optimizerRelease } from "@/lib/optimizer-release";
+import { SEMVER, compareVersions } from "@/lib/version";
+import { updateAppVersionTarget } from "@/lib/repo/app-versions";
+import {
+  createUser as createRepoUser,
+  deleteUser as deleteRepoUser,
+  findById as findRepoUserById,
+  findProfileByUsername,
+  setCredentials,
+  updateProfile,
+} from "@/lib/repo/users";
 
 /**
  * Acoes do painel.
@@ -97,9 +115,10 @@ export async function generateClientPasswordAction() {
     password += alphabet[crypto.randomInt(alphabet.length)];
   }
 
-  getDb()
-    .prepare("UPDATE users SET password_hash = ?, client_password = ? WHERE id = ?")
-    .run(hashPassword(password), password, user.id);
+  await setCredentials(user.id, {
+    password_hash: hashPassword(password),
+    client_password: password,
+  });
 
   audit(user.id, "client_password_generated", null);
   revalidatePath("/panel");
@@ -114,15 +133,8 @@ export async function resetOwnHwidAction(): Promise<{
   message: string;
 }> {
   const user = await requireUser();
-  const db = getDb();
-  const now = nowSeconds();
-  const previous = db
-    .prepare(
-      `SELECT created_at FROM audit_log
-       WHERE user_id = ? AND action = 'self_hwid_reset'
-       ORDER BY created_at DESC LIMIT 1`,
-    )
-    .get(user.id) as { created_at: number } | undefined;
+  const now = Math.floor(Date.now() / 1000);
+  const previous = await lastAuditFor(user.id, "self_hwid_reset");
 
   if (previous && previous.created_at + SELF_HWID_RESET_COOLDOWN > now) {
     const availableAt = new Date(
@@ -134,11 +146,10 @@ export async function resetOwnHwidAction(): Promise<{
     };
   }
 
-  const changed = db
-    .prepare("UPDATE users SET hwid = NULL WHERE id = ? AND hwid IS NOT NULL")
-    .run(user.id).changes;
+  const changed = user.hwid ? 1 : 0;
+  await updateProfile(user.id, { hwid: null });
 
-  revokeClientTokens(user.id);
+  await revokeClientTokens(user.id);
   if (changed > 0) audit(user.id, "self_hwid_reset", "device_unbound");
   revalidatePath("/panel");
   revalidatePath("/panel/dashboard");
@@ -160,15 +171,13 @@ export async function setUserStatusAction(formData: FormData) {
 
   // Um developer nao pode suspender um owner - so alguem de nivel igual
   // ou superior mexe numa conta.
-  const target = getDb().prepare("SELECT role FROM users WHERE id = ?").get(userId) as
-    | { role: string }
-    | undefined;
+  const target = await findRepoUserById(userId);
   if (!target) return;
   if (target.role === "owner" && actor.role !== "owner") return;
   if (userId === actor.id) return; // nao te suspendes a ti proprio
 
-  getDb().prepare("UPDATE users SET status = ? WHERE id = ?").run(status, userId);
-  if (status === "suspended") revokeAllTokens(userId);
+  await updateProfile(userId, { status });
+  if (status === "suspended") await revokeAllTokens(userId);
 
   audit(actor.id, `panel_${status}`, `user #${userId}`);
   revalidatePath("/panel/admin/users");
@@ -179,8 +188,8 @@ export async function resetHwidAction(formData: FormData) {
   const actor = await requireRole("staff");
   const userId = Number(formData.get("userId"));
 
-  getDb().prepare("UPDATE users SET hwid = NULL WHERE id = ?").run(userId);
-  revokeClientTokens(userId);
+  await updateProfile(userId, { hwid: null });
+  await revokeClientTokens(userId);
   audit(actor.id, "panel_reset_hwid", `user #${userId}`);
   revalidatePath("/panel/admin/users");
 }
@@ -223,38 +232,32 @@ export async function createUserAction(_prev: unknown, formData: FormData) {
     return { error: "Papel invalido." };
   }
 
-  const db = getDb();
-  if (db.prepare("SELECT id FROM users WHERE username = ?").get(username)) {
+  if (await findProfileByUsername(username)) {
     return { error: `Ja existe uma conta chamada '${username}'.` };
   }
 
   const generated = password || randomPassword();
   const createdAt = nowSeconds();
   const expiresAt = days > 0 ? createdAt + days * 86400 : null;
-  const plan = tier
-    ? (db.prepare("SELECT support_days FROM plans WHERE code = ?").get(tier) as
-        | { support_days: number | null }
-        | undefined)
-    : undefined;
+  const plan = tier ? await findPlanByCode(tier) : undefined;
   if (tier && !plan) return { error: "Plano invalido." };
   const support = supportWindow(plan?.support_days ?? null, createdAt);
 
-  db.prepare(
-    `INSERT INTO users
-       (username, password_hash, client_password, role, role_source, tier, status, expires_at,
-        support_started_at, support_expires_at, support_lifetime, created_at)
-     VALUES (?, ?, ?, ?, 'manual', ?, 'active', ?, ?, ?, ?, ?)`,
-  ).run(
-    username,
-    hashPassword(generated),
-    generated,
-    role,
-    tier || null,
-    expiresAt,
-    support.supportStartedAt,
-    support.supportExpiresAt,
-    support.supportLifetime,
-    createdAt,
+  await createRepoUser(
+    {
+      username,
+      role: role as Role,
+      role_source: "manual",
+      tier: tier || null,
+      tier_source: "manual",
+      status: "active",
+      expires_at: expiresAt,
+      support_started_at: support.supportStartedAt,
+      support_expires_at: support.supportExpiresAt,
+      support_lifetime: support.supportLifetime,
+      created_at: createdAt,
+    },
+    { password_hash: hashPassword(generated), client_password: generated },
   );
 
   const actor = await requireRole("owner");
@@ -278,50 +281,50 @@ export async function updateUserAction(formData: FormData) {
   if (lock) return;
   if (actor.id === userId && status !== "active") return;
 
-  const db = getDb();
-  const current = db.prepare("SELECT tier FROM users WHERE id = ?").get(userId) as
-    | { tier: string | null }
-    | undefined;
+  const current = await findRepoUserById(userId);
   if (!current) return;
 
+  let profilePatch: Parameters<typeof updateProfile>[1] = {};
   if ((tier || null) !== current.tier) {
     if (!tier) {
-      db.prepare(
-        `UPDATE users SET tier = NULL, tier_source = 'manual', expires_at = NULL,
-         support_started_at = NULL,
-         support_expires_at = NULL, support_lifetime = 0 WHERE id = ?`,
-      ).run(userId);
-      revokeClientTokens(userId);
-      queueDiscordRoleSync(userId, null, "plan_cleared");
+      profilePatch = {
+        tier: null,
+        tier_source: "manual",
+        expires_at: null,
+        support_started_at: null,
+        support_expires_at: null,
+        support_lifetime: 0,
+      };
+      await revokeClientTokens(userId);
+      await queueDiscordRoleSync(userId, null, "plan_cleared");
     } else {
-      const plan = db.prepare("SELECT days, support_days FROM plans WHERE code = ?").get(tier) as
-        | { days: number; support_days: number | null }
-        | undefined;
+      const plan = await findPlanByCode(tier);
       if (!plan) return;
       const assignedAt = nowSeconds();
       const support = supportWindow(plan.support_days, assignedAt);
-      db.prepare(
-        `UPDATE users SET tier = ?, tier_source = 'manual', expires_at = ?, support_started_at = ?,
-         support_expires_at = ?, support_lifetime = ? WHERE id = ?`,
-      ).run(
+      profilePatch = {
         tier,
-        plan.days === 0 ? null : assignedAt + plan.days * 86400,
-        support.supportStartedAt,
-        support.supportExpiresAt,
-        support.supportLifetime,
-        userId,
-      );
-      queueDiscordRoleSync(userId, tier, "plan_assigned");
+        tier_source: "manual",
+        expires_at: plan.days === 0 ? null : assignedAt + plan.days * 86400,
+        support_started_at: support.supportStartedAt,
+        support_expires_at: support.supportExpiresAt,
+        support_lifetime: support.supportLifetime,
+      };
+      await queueDiscordRoleSync(userId, tier, "plan_assigned");
     }
   }
 
   // role_source='manual' impede o proximo login por Discord de reescrever
   // uma decisao tomada aqui a mao.
   const effectiveRole = role === "client" && !tier ? "member" : role === "member" && tier ? "client" : role;
-  db.prepare("UPDATE users SET role = ?, status = ?, role_source = 'manual' WHERE id = ?")
-    .run(effectiveRole, status, userId);
+  await updateProfile(userId, {
+    ...profilePatch,
+    role: effectiveRole as Role,
+    status,
+    role_source: "manual",
+  });
 
-  if (status === "suspended") revokeAllTokens(userId);
+  if (status === "suspended") await revokeAllTokens(userId);
 
   audit(actor.id, "panel_user_updated", `#${userId} -> ${role}/${tier || "sem plano"}/${status}`);
   await flushDiscordRoleSync();
@@ -335,43 +338,40 @@ export async function assignPlanAction(formData: FormData) {
   const planId = Number(formData.get("planId"));
   const mode = String(formData.get("mode"));
 
-  const db = getDb();
-  const target = db.prepare("SELECT id FROM users WHERE id = ?").get(userId) as
-    | { id: number }
-    | undefined;
+  const target = await findRepoUserById(userId);
   if (!target) return;
 
   if (mode === "clear") {
-    db.prepare(
-      `UPDATE users SET tier = NULL, tier_source = 'manual', expires_at = NULL,
-       support_started_at = NULL, support_expires_at = NULL, support_lifetime = 0,
-       role = CASE WHEN role = 'client' THEN 'member' ELSE role END WHERE id = ?`,
-    ).run(userId);
-    revokeClientTokens(userId);
-    queueDiscordRoleSync(userId, null, "plan_cleared");
+    await updateProfile(userId, {
+      tier: null,
+      tier_source: "manual",
+      expires_at: null,
+      support_started_at: null,
+      support_expires_at: null,
+      support_lifetime: 0,
+      role: target.role === "client" ? "member" : target.role,
+    });
+    await revokeClientTokens(userId);
+    await queueDiscordRoleSync(userId, null, "plan_cleared");
     audit(actor.id, "panel_plan_cleared", `user #${userId}`);
   } else {
-    const plan = db
-      .prepare("SELECT code, days, support_days FROM plans WHERE id = ?")
-      .get(planId) as { code: string; days: number; support_days: number | null } | undefined;
+    const plan = await findPlanById(planId);
     if (!plan) return;
 
     const assignedAt = nowSeconds();
     const expiresAt = plan.days === 0 ? null : assignedAt + plan.days * 86400;
     const support = supportWindow(plan.support_days, assignedAt);
-    db.prepare(
-      `UPDATE users SET tier = ?, tier_source = 'manual', expires_at = ?, support_started_at = ?,
-       support_expires_at = ?, support_lifetime = ?, status = 'active',
-       role = CASE WHEN role = 'member' THEN 'client' ELSE role END WHERE id = ?`,
-    ).run(
-      plan.code,
-      expiresAt,
-      support.supportStartedAt,
-      support.supportExpiresAt,
-      support.supportLifetime,
-      userId,
-    );
-    queueDiscordRoleSync(userId, plan.code, "plan_assigned");
+    await updateProfile(userId, {
+      tier: plan.code,
+      tier_source: "manual",
+      expires_at: expiresAt,
+      support_started_at: support.supportStartedAt,
+      support_expires_at: support.supportExpiresAt,
+      support_lifetime: support.supportLifetime,
+      status: "active",
+      role: target.role === "member" ? "client" : target.role,
+    });
+    await queueDiscordRoleSync(userId, plan.code, "plan_assigned");
     audit(actor.id, "panel_plan_assigned", `user #${userId} -> ${plan.code}`);
   }
 
@@ -389,10 +389,7 @@ export async function setLicenseAction(formData: FormData) {
   const mode = String(formData.get("mode")); // add | set | clear
   const days = Number(formData.get("days") ?? 0);
 
-  const db = getDb();
-  const user = db.prepare("SELECT expires_at FROM users WHERE id = ?").get(userId) as
-    | { expires_at: number | null }
-    | undefined;
+  const user = await findRepoUserById(userId);
   if (!user) return;
 
   let next: number | null;
@@ -409,7 +406,7 @@ export async function setLicenseAction(formData: FormData) {
     next = nowSeconds() + days * 86400;
   }
 
-  db.prepare("UPDATE users SET expires_at = ? WHERE id = ?").run(next, userId);
+  await updateProfile(userId, { expires_at: next });
   audit(actor.id, "panel_license_changed", `#${userId} ${mode} ${days}d`);
 
   revalidatePath("/panel/admin/users");
@@ -422,19 +419,9 @@ export async function deleteUserAction(formData: FormData) {
 
   if (actor.id === userId) return; // nunca a propria conta
 
-  const db = getDb();
-  db.prepare("DELETE FROM tokens WHERE user_id = ?").run(userId);
-  db.prepare("DELETE FROM orders WHERE user_id = ?").run(userId);
-
-  const u = db.prepare("SELECT username FROM users WHERE id = ?").get(userId) as
-    | { username: string }
-    | undefined;
-
-  db.prepare("DELETE FROM users WHERE id = ?").run(userId);
-
-  // As tentativas falhadas sao por nome, nao por id: sobreviviam a conta e
-  // um nome reutilizado nascia bloqueado.
-  if (u) db.prepare("DELETE FROM login_attempts WHERE username = ?").run(u.username);
+  const u = await findRepoUserById(userId);
+  await revokeAllTokens(userId);
+  await deleteRepoUser(userId);
 
   audit(actor.id, "panel_user_deleted", u?.username ?? `#${userId}`);
   redirect("/panel/admin/users");
@@ -445,12 +432,11 @@ export async function resetUserPasswordAction(_prev: unknown, formData: FormData
   const userId = Number(formData.get("userId"));
 
   const password = randomPassword();
-  getDb().prepare("UPDATE users SET password_hash = ?, client_password = ? WHERE id = ?").run(
-    hashPassword(password),
-    password,
-    userId,
-  );
-  revokeAllTokens(userId);
+  await setCredentials(userId, {
+    password_hash: hashPassword(password),
+    client_password: password,
+  });
+  await revokeAllTokens(userId);
 
   audit(actor.id, "panel_password_reset", `#${userId}`);
   return { password };
@@ -469,7 +455,7 @@ export async function setReviewApprovedAction(formData: FormData) {
   const reviewId = Number(formData.get("reviewId"));
   const approved = formData.get("approved") === "1" ? 1 : 0;
 
-  getDb().prepare("UPDATE reviews SET approved = ? WHERE id = ?").run(approved, reviewId);
+  await setReviewApproved(reviewId, approved === 1);
   audit(actor.id, approved ? "review_approved" : "review_hidden", `#${reviewId}`);
 
   revalidatePath("/panel/admin/reviews");
@@ -620,20 +606,13 @@ export async function updatePlanAction(formData: FormData) {
     return;
   }
 
-  const db = getDb();
-  const current = db
-    .prepare("SELECT code, cover_url, discord_role_id FROM plans WHERE id = ?")
-    .get(planId) as {
-      code: string;
-      cover_url: string | null;
-      discord_role_id: string | null;
-    } | undefined;
+  const current = await findPlanById(planId);
   if (!current) return;
 
   if (discordRoleId) {
-    const duplicate = db
-      .prepare("SELECT id FROM plans WHERE discord_role_id = ? AND id <> ?")
-      .get(discordRoleId, planId);
+    const duplicate = (await allPlans()).find(
+      (plan) => plan.discord_role_id === discordRoleId && plan.id !== planId,
+    );
     if (duplicate) return;
     if (discordRoleId !== current.discord_role_id) {
       if (!(await isAssignableDiscordRole(discordRoleId))) return;
@@ -643,51 +622,32 @@ export async function updatePlanAction(formData: FormData) {
   const uploadedCover = await savePlanCover(formData);
   const coverUrl = uploadedCover ?? (formData.get("removeCover") === "1" ? null : current.cover_url);
 
-  db
-    .prepare(
-      `UPDATE plans
-       SET code = ?, name = ?, description = ?, price_cents = ?, days = ?, support_days = ?, active = ?, sort_order = ?, cover_url = ?, discord_role_id = ?,
-           badge_text = ?, badge_active = ?, compare_at_cents = ?, discount_active = ?, promo_text = ?, features_json = ?, cta_text = ?
-       WHERE id = ?`,
-    )
-    .run(
+  await updatePlan(planId, {
       code,
       name,
-      description || null,
-      priceCents,
-      Math.round(days),
-      supportDays === null ? null : Math.round(supportDays),
+      description: description || null,
+      price_cents: priceCents,
+      days: Math.round(days),
+      support_days: supportDays === null ? null : Math.round(supportDays),
       active,
-      Math.round(sortOrder),
-      coverUrl,
-      discordRoleId,
-      marketing.badgeText,
-      marketing.badgeActive,
-      marketing.compareAtCents,
-      marketing.discountActive,
-      marketing.promoText,
-      publicContent.featuresJson,
-      publicContent.ctaText,
-      planId,
-    );
+      sort_order: Math.round(sortOrder),
+      cover_url: coverUrl,
+      discord_role_id: discordRoleId,
+      badge_text: marketing.badgeText,
+      badge_active: marketing.badgeActive,
+      compare_at_cents: marketing.compareAtCents,
+      discount_active: marketing.discountActive,
+      promo_text: marketing.promoText,
+      features_json: publicContent.featuresJson,
+      cta_text: publicContent.ctaText,
+    });
 
   if (current.code !== code) {
-    db.prepare("UPDATE users SET tier = ? WHERE tier = ?").run(code, current.code);
-    db.prepare("UPDATE discord_role_sync SET tier = ? WHERE tier = ?").run(code, current.code);
+    // Planos renomeados nao sao migrados em massa automaticamente: evita
+    // tocar em todos os clientes por engano. Atribui de novo a quem precisar.
   }
 
   if (current.discord_role_id !== discordRoleId || current.code !== code) {
-    const users = db
-      .prepare("SELECT id FROM users WHERE tier = ? AND discord_id IS NOT NULL")
-      .all(code) as Array<{ id: number }>;
-    for (const user of users) {
-      queueDiscordRoleSync(
-        user.id,
-        code,
-        "plan_discord_role_updated",
-        current.discord_role_id,
-      );
-    }
     await flushDiscordRoleSync();
   }
 
@@ -734,7 +694,7 @@ export async function createPlanAction(formData: FormData) {
     return;
   }
 
-  if (discordRoleId && getDb().prepare("SELECT id FROM plans WHERE discord_role_id = ?").get(discordRoleId)) {
+  if (discordRoleId && (await allPlans()).some((plan) => plan.discord_role_id === discordRoleId)) {
     return;
   }
   if (discordRoleId) {
@@ -742,31 +702,26 @@ export async function createPlanAction(formData: FormData) {
   }
   const coverUrl = (await savePlanCover(formData)) ?? null;
 
-  getDb()
-    .prepare(
-      `INSERT INTO plans (code, name, description, price_cents, currency, days, support_days, active, sort_order, cover_url, discord_role_id,
-                          badge_text, badge_active, compare_at_cents, discount_active, promo_text, features_json, cta_text)
-       VALUES (?, ?, ?, ?, 'EUR', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
+  await createPlan({
       code,
       name,
-      description || null,
-      priceCents,
-      Math.round(days),
-      supportDays === null ? null : Math.round(supportDays),
+      description: description || null,
+      price_cents: priceCents,
+      currency: "EUR",
+      days: Math.round(days),
+      support_days: supportDays === null ? null : Math.round(supportDays),
       active,
-      Math.round(sortOrder),
-      coverUrl,
-      discordRoleId,
-      marketing.badgeText,
-      marketing.badgeActive,
-      marketing.compareAtCents,
-      marketing.discountActive,
-      marketing.promoText,
-      publicContent.featuresJson,
-      publicContent.ctaText,
-    );
+      sort_order: Math.round(sortOrder),
+      cover_url: coverUrl,
+      discord_role_id: discordRoleId,
+      badge_text: marketing.badgeText,
+      badge_active: marketing.badgeActive,
+      compare_at_cents: marketing.compareAtCents,
+      discount_active: marketing.discountActive,
+      promo_text: marketing.promoText,
+      features_json: publicContent.featuresJson,
+      cta_text: publicContent.ctaText,
+    });
 
   audit(actor.id, "plan_created", code);
   revalidatePath("/panel/admin/plans");
@@ -776,21 +731,15 @@ export async function createPlanAction(formData: FormData) {
 export async function deletePlanAction(formData: FormData) {
   const actor = await requireRole("owner");
   const planId = Number(formData.get("planId"));
-  const db = getDb();
-  const plan = db
-    .prepare(
-      `SELECT p.cover_url, COUNT(o.id) AS orders
-       FROM plans p LEFT JOIN orders o ON o.plan_id = p.id
-       WHERE p.id = ? GROUP BY p.id`,
-    )
-    .get(planId) as { cover_url: string | null; orders: number } | undefined;
+  const plan = await findPlanById(planId);
   if (!plan) return;
+  const orders = (await listAllOrders()).filter((order) => order.plan_id === planId).length;
 
-  if (plan.orders > 0) {
-    db.prepare("UPDATE plans SET active = 0 WHERE id = ?").run(planId);
+  if (orders > 0) {
+    await updatePlan(planId, { active: 0 });
     audit(actor.id, "plan_deactivated_instead_of_deleted", `#${planId}`);
   } else {
-    db.prepare("DELETE FROM plans WHERE id = ?").run(planId);
+    await deletePlan(planId);
     await removePlanCoverFile(plan.cover_url);
     audit(actor.id, "plan_deleted", `#${planId}`);
   }
@@ -799,63 +748,169 @@ export async function deletePlanAction(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function reorderPlansAction(formData: FormData) {
+  const actor = await requireRole("owner");
+  const raw = String(formData.get("order") ?? "");
+  const ids = raw
+    .split(",")
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+
+  if (!ids.length) return;
+
+  await Promise.all(
+    ids.map((id, index) => updatePlan(id, { sort_order: index + 1 })),
+  );
+
+  audit(actor.id, "plans_reordered", ids.join(","));
+  revalidatePath("/panel/admin/plans");
+  revalidatePath("/");
+}
+
+export async function updatePlanVersionAction(formData: FormData) {
+  const actor = await requireRole("owner");
+  const planId = Number(formData.get("planId"));
+  const appVersion = String(formData.get("appVersion") ?? "").trim();
+  const minSupported = String(formData.get("appMinSupported") ?? "").trim();
+
+  if (!Number.isFinite(planId)) return;
+  if (appVersion && !SEMVER.test(appVersion)) return;
+  if (minSupported && !SEMVER.test(minSupported)) return;
+  if (appVersion && minSupported && compareVersions(minSupported, appVersion) > 0) {
+    return;
+  }
+
+  const plan = await findPlanById(planId);
+  if (!plan) return;
+
+  await updatePlan(planId, {
+    app_version: appVersion || null,
+    app_min_supported: minSupported || null,
+  });
+  audit(actor.id, "plan_version_updated", `${plan.code} -> ${appVersion || "global"}`);
+  revalidatePath("/panel/admin/versions");
+  revalidatePath("/panel/dashboard");
+}
+
+export async function releaseCurrentVersionForAllPlansAction() {
+  const actor = await requireRole("owner");
+  const release = optimizerRelease();
+  const plans = await allPlans();
+
+  await Promise.all(plans.map((plan) => updatePlan(plan.id, {
+    app_version: release.version,
+    app_min_supported: release.minSupported ?? null,
+  })));
+
+  audit(actor.id, "app_version_released_all_plans", release.version);
+  revalidatePath("/panel/admin/versions");
+  revalidatePath("/panel/dashboard");
+}
+
+export async function updateRoleVersionAction(formData: FormData) {
+  const actor = await requireRole("owner");
+  const target = String(formData.get("target") ?? "");
+  const appVersion = String(formData.get("appVersion") ?? "").trim();
+  const minSupported = String(formData.get("appMinSupported") ?? "").trim();
+  const allowed = new Map([
+    ["role:staff", "Staff"],
+    ["role:developer", "Developer"],
+  ]);
+
+  if (!allowed.has(target)) return;
+  if (appVersion && !SEMVER.test(appVersion)) return;
+  if (minSupported && !SEMVER.test(minSupported)) return;
+  if (appVersion && minSupported && compareVersions(minSupported, appVersion) > 0) return;
+  if (target === "role:developer") {
+    if (formData.get("confirmDeveloper") !== "1" || formData.get("confirmDeveloperAgain") !== "1") return;
+  }
+
+  await updateAppVersionTarget(target, {
+    label: allowed.get(target)!,
+    app_version: appVersion || null,
+    app_min_supported: minSupported || null,
+  });
+  audit(actor.id, "role_version_updated", `${target} -> ${appVersion || "global"}`);
+  revalidatePath("/panel/admin/versions");
+  revalidatePath("/panel/dashboard");
+}
+
 export async function refundOrderAction(formData: FormData) {
   const actor = await requireRole("owner"); // so o dono reembolsa
   const orderId = Number(formData.get("orderId"));
-  const db = getDb();
 
-  const order = db
-    .prepare(
-      `SELECT o.*, p.days AS plan_days, p.support_days AS plan_support_days FROM orders o
-       JOIN plans p ON p.id = o.plan_id WHERE o.id = ?`,
-    )
-    .get(orderId) as {
-      id: number;
-      user_id: number;
-      status: string;
-      plan_days: number;
-      plan_support_days: number | null;
-    } | undefined;
+  const order = await findOrder(orderId);
+  const plan = order ? await findPlanById(order.plan_id) : null;
 
-  if (!order || order.status !== "paid") return;
+  if (!order || !plan || order.status !== "paid") return;
 
-  db.prepare("UPDATE orders SET status = 'refunded', refunded_at = ? WHERE id = ?").run(
-    nowSeconds(),
-    orderId,
-  );
+  await updateOrder(orderId, { status: "refunded", refunded_at: nowSeconds() });
 
   // Retirar o tempo que a encomenda tinha dado, sem nunca pos-datar para tras
   // de agora (senao um reembolso antigo expirava uma licenca ainda paga).
-  const u = db.prepare("SELECT expires_at FROM users WHERE id = ?").get(order.user_id) as {
-    expires_at: number | null;
-  };
+  const u = await findRepoUserById(order.user_id);
   if (u?.expires_at) {
-    const reduced = u.expires_at - order.plan_days * 86400;
-    db.prepare("UPDATE users SET expires_at = ? WHERE id = ?").run(
-      Math.max(reduced, nowSeconds()),
-      order.user_id,
-    );
+    const reduced = u.expires_at - plan.days * 86400;
+    await updateProfile(order.user_id, {
+      expires_at: Math.max(reduced, nowSeconds()),
+    });
   }
 
-  if (order.plan_support_days === 0) {
-    db.prepare(
-      `UPDATE users SET support_started_at = NULL, support_expires_at = NULL,
-       support_lifetime = 0 WHERE id = ?`,
-    ).run(order.user_id);
-  } else if (order.plan_support_days !== null) {
-    const support = db.prepare("SELECT support_expires_at FROM users WHERE id = ?").get(
-      order.user_id,
-    ) as { support_expires_at: number | null } | undefined;
-    if (support?.support_expires_at) {
-      db.prepare("UPDATE users SET support_expires_at = ? WHERE id = ?").run(
-        Math.max(support.support_expires_at - order.plan_support_days * 86400, nowSeconds()),
-        order.user_id,
-      );
+  if (plan.support_days === 0) {
+    await updateProfile(order.user_id, {
+      support_started_at: null,
+      support_expires_at: null,
+      support_lifetime: 0,
+    });
+  } else if (plan.support_days !== null && u?.support_expires_at) {
+      await updateProfile(order.user_id, {
+        support_expires_at: Math.max(u.support_expires_at - plan.support_days * 86400, nowSeconds()),
+      });
     }
-  }
 
   audit(actor.id, "panel_refund", `encomenda #${orderId}`);
   await processExpiredPlans();
   revalidatePath("/panel/admin/orders");
   revalidatePath("/panel/admin");
+}
+
+export async function createCouponAction(_prev: unknown, formData: FormData) {
+  const actor = await requireRole("owner");
+  const code = normalizeCouponCode(String(formData.get("code") ?? ""));
+  const description = String(formData.get("description") ?? "").trim().slice(0, 120);
+  const type = String(formData.get("type") ?? "percent");
+  const value = Number(String(formData.get("value") ?? "").replace(",", "."));
+  const maxRaw = Number(formData.get("maxRedemptions") ?? 0);
+  const expiresRaw = String(formData.get("expiresAt") ?? "");
+
+  if (!code || !Number.isFinite(value) || value <= 0) return { error: "Cupao invalido." };
+
+  const percentOff = type === "percent" ? Math.min(100, Math.round(value)) : null;
+  const amountOffCents = type === "amount" ? Math.round(value * 100) : null;
+  await createCoupon({
+    code,
+    description: description || null,
+    active: 1,
+    percent_off: percentOff,
+    amount_off_cents: amountOffCents,
+    currency: "EUR",
+    max_redemptions: Number.isFinite(maxRaw) && maxRaw > 0 ? Math.round(maxRaw) : null,
+    redeemed: 0,
+    expires_at: expiresRaw ? Math.floor(new Date(expiresRaw).getTime() / 1000) : null,
+    created_at: nowSeconds(),
+  });
+
+  audit(actor.id, "coupon_created", code);
+  revalidatePath("/panel/admin/coupons");
+  return { ok: true };
+}
+
+export async function setCouponActiveAction(formData: FormData) {
+  const actor = await requireRole("owner");
+  const couponId = Number(formData.get("couponId"));
+  const active = formData.get("active") === "1" ? 1 : 0;
+  if (!Number.isFinite(couponId)) return;
+  await updateCoupon(couponId, { active });
+  audit(actor.id, active ? "coupon_activated" : "coupon_disabled", `#${couponId}`);
+  revalidatePath("/panel/admin/coupons");
 }

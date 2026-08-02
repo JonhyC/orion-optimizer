@@ -1,4 +1,5 @@
 import { NO_PASSWORD, type User } from "./repo/types.ts";
+import { cached } from "./cache.ts";
 import { findPlanByCode, planDiscordRoleIds, planForRoleIds } from "./repo/plans.ts";
 import { updateProfile, upsertFromDiscord } from "./repo/users.ts";
 
@@ -90,6 +91,10 @@ export type DiscordGuildRole = {
 
 /** Cargos reais do servidor e se o bot os pode atribuir pela sua hierarquia. */
 export async function fetchDiscordGuildRoles(): Promise<DiscordGuildRole[]> {
+  return cached("discord:guild-roles", 30_000, fetchDiscordGuildRolesFresh);
+}
+
+async function fetchDiscordGuildRolesFresh(): Promise<DiscordGuildRole[]> {
   const cfg = discordConfig();
   if (!cfg?.botToken) throw new Error("Bot Discord nao configurado.");
 

@@ -35,7 +35,7 @@ export default async function AccountPage() {
   // precisam delas para testar e para dar apoio.
   const needsClientAccess = hasLicense || roleAtLeast(user, "staff");
 
-  const orders = hasLicense ? ordersForUser(user.id) : [];
+  const orders = hasLicense ? await ordersForUser(user.id) : [];
   const active = hasLicense && (user.expires_at === null || user.expires_at > now);
   const daysLeft =
     user.expires_at === null ? null : Math.max(0, Math.ceil((user.expires_at - now) / 86400));
@@ -195,22 +195,23 @@ export default async function AccountPage() {
             />
           </Card>
 
-          <Card
-            title="Cliente Windows"
-            subtitle={
-              hasLicense
-                ? "Credenciais para o optimizador em si"
-                : "Acesso pelo teu cargo, para testar e dar apoio"
-            }
-            className="mt-5"
-          >
+          <div id="credenciais-windows" className="scroll-mt-24">
+            <Card
+              title="Cliente Windows"
+              subtitle={
+                hasLicense
+                  ? "Credenciais para o optimizador em si"
+                  : "Acesso pelo teu cargo, para testar e dar apoio"
+              }
+              className="mt-5"
+            >
             <div className="flex flex-wrap items-center justify-between gap-5">
               <div className="flex min-w-0 items-center gap-4">
                 <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-[var(--chart-1)]/20 bg-[var(--chart-1)]/10 text-[var(--chart-1)]">
                   <MonitorCog size={22} />
                 </div>
                 <div>
-                  <div className="text-[15px] font-semibold text-white">Orion Optimizer</div>
+                  <div className="text-[15px] font-semibold text-white">Orion Optimizer 2.0</div>
                   <div className="mt-1 flex items-center gap-1.5 text-[12px] text-[var(--good)]">
                     <ShieldCheck size={13} />
                     Acesso autorizado para esta conta
@@ -224,7 +225,8 @@ export default async function AccountPage() {
             <div className="mt-5 border-t border-white/[0.06] pt-5">
               <ClientPassword hasPassword={user.password_hash !== NO_PASSWORD} />
             </div>
-          </Card>
+            </Card>
+          </div>
 
           <Card title="Compras" className="mt-5">
             {orders.length === 0 ? (

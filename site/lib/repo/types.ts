@@ -88,6 +88,8 @@ export type Plan = {
   promo_text: string | null;
   features_json: string | null;
   cta_text: string | null;
+  app_version: string | null;
+  app_min_supported: string | null;
 };
 
 export type Order = {
@@ -109,6 +111,23 @@ export type Order = {
    */
   username: string;
   plan_name: string;
+  coupon_id?: number | null;
+  coupon_code?: string | null;
+  discount_cents?: number;
+};
+
+export type Coupon = {
+  id: number;
+  code: string;
+  description: string | null;
+  active: number;
+  percent_off: number | null;
+  amount_off_cents: number | null;
+  currency: string;
+  max_redemptions: number | null;
+  redeemed: number;
+  expires_at: number | null;
+  created_at: number;
 };
 
 export type Review = {
@@ -149,15 +168,74 @@ export type DiscordRoleSync = {
   updated_at: number;
 };
 
+export type ActiveOptimization = {
+  id: string;
+  user_id: number;
+  tweak_id: string;
+  name: string;
+  description: string | null;
+  category: string;
+  impact: string | null;
+  requires_reboot: number;
+  session_id: string | null;
+  applied_at: number;
+  mode: string;
+  machine_hwid: string | null;
+  machine_chassis: string | null;
+  machine_gpu: string | null;
+  machine_ram_gb: number | null;
+  client_version: string | null;
+  updated_at: number;
+};
+
+export type SupportTicketStatus = "open" | "answered" | "closed";
+export type SupportTicketPriority = "normal" | "urgent";
+export type SupportMessageAuthor = "user" | "staff";
+
+export type SupportTicket = {
+  id: number;
+  user_id: number;
+  username: string;
+  discord_id: string | null;
+  discord_username: string | null;
+  subject: string;
+  category: string;
+  priority: SupportTicketPriority;
+  status: SupportTicketStatus;
+  assigned_to: number | null;
+  assigned_name: string | null;
+  rating: number | null;
+  rating_comment: string | null;
+  unread_for_user: number;
+  unread_for_staff: number;
+  created_at: number;
+  updated_at: number;
+  closed_at: number | null;
+};
+
+export type SupportMessage = {
+  id: number;
+  ticket_id: number;
+  user_id: number;
+  username: string;
+  author_role: SupportMessageAuthor;
+  body: string;
+  created_at: number;
+};
+
 export const COLLECTIONS = {
   users: "users",
   tokens: "tokens",
   plans: "plans",
   orders: "orders",
+  coupons: "coupons",
   reviews: "reviews",
   audit: "audit_log",
   attempts: "login_attempts",
   roleSync: "discord_role_sync",
+  activeOptimizations: "active_optimizations",
+  supportTickets: "support_tickets",
+  supportMessages: "support_messages",
 } as const;
 
 /** Subcoleccao e documento onde ficam as credenciais de cada utilizador. */

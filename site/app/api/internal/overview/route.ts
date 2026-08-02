@@ -1,6 +1,14 @@
 import { avatarUrl } from "@/lib/discord";
-import { bearerToken, userFromToken } from "@/lib/auth";
-import { getDb, nowSeconds } from "@/lib/db";
+import { bearerToken, nowSeconds, userFromToken } from "@/lib/auth";
+import { firestore } from "@/lib/firebase-admin";
+import { readCatalog } from "@/lib/catalog";
+import { filterTweaksForUser, isTweakEnabled, minimumTierForTweak } from "@/lib/optimizer-access";
+import { listActiveOptimizations } from "@/lib/repo/active-optimizations";
+import { recentAudit } from "@/lib/repo/audit";
+import { listAllOrders } from "@/lib/repo/orders";
+import { activeUserIds } from "@/lib/repo/tokens";
+import { COLLECTIONS, type AuditEntry, type LoginAttempt, type Token, type UserProfile } from "@/lib/repo/types";
+import { countUsers, listProfiles } from "@/lib/repo/users";
 import { fail, ok } from "../../_lib/respond";
 
 export const runtime = "nodejs";
@@ -9,7 +17,36 @@ export const dynamic = "force-dynamic";
 const INTERNAL_ROLES = new Set(["staff", "developer", "owner"]);
 const DAY = 86400;
 
-type CountRow = { n: number };
+async function countFailedLogins(since: number): Promise<number> {
+  const snap = await firestore()
+    .collection(COLLECTIONS.attempts)
+    .where("success", "==", 0)
+    .get();
+  return snap.docs.filter((doc) => (doc.data() as LoginAttempt).created_at >= since).length;
+}
+
+async function tokenSeen(kind: "api" | "web", now: number): Promise<Map<number, number>> {
+  const snap = await firestore()
+    .collection(COLLECTIONS.tokens)
+    .where("kind", "==", kind)
+    .get();
+  const seen = new Map<number, number>();
+  for (const doc of snap.docs) {
+    const token = doc.data() as Token;
+    if (token.expires_at <= now) continue;
+    seen.set(token.user_id, Math.max(seen.get(token.user_id) ?? 0, token.last_seen_at ?? 0));
+  }
+  return seen;
+}
+
+function actionCounts(entries: AuditEntry[], since: number): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const entry of entries) {
+    if (entry.created_at < since) continue;
+    counts[entry.action] = (counts[entry.action] ?? 0) + 1;
+  }
+  return counts;
+}
 
 export async function GET(req: Request) {
   const actor = await userFromToken(bearerToken(req));
@@ -18,159 +55,146 @@ export async function GET(req: Request) {
     return fail("Sem permissao para consultar a operacao Orion.", 403, "forbidden");
   }
 
-  const db = getDb();
   const now = nowSeconds();
   const onlineSince = now - 5 * 60;
   const since24h = now - DAY;
   const since30d = now - 30 * DAY;
-  const count = (sql: string, ...params: Array<string | number>) =>
-    (db.prepare(sql).get(...params) as CountRow).n;
 
-  const metrics = {
-    users: count("SELECT COUNT(*) AS n FROM users"),
-    activeLicenses: count(
-      `SELECT COUNT(*) AS n FROM users
-       WHERE status = 'active' AND (tier IS NOT NULL OR expires_at IS NOT NULL)
-         AND (expires_at IS NULL OR expires_at > ?)`,
-      now,
-    ),
-    onlineSite: count(
-      `SELECT COUNT(DISTINCT user_id) AS n FROM tokens
-       WHERE kind = 'web' AND expires_at > ? AND last_seen_at >= ?`,
-      now,
-      onlineSince,
-    ),
-    onlineOptimizer: count(
-      `SELECT COUNT(DISTINCT user_id) AS n FROM tokens
-       WHERE kind = 'api' AND expires_at > ? AND last_seen_at >= ?`,
-      now,
-      onlineSince,
-    ),
-    failedLogins24h: count(
-      "SELECT COUNT(*) AS n FROM login_attempts WHERE success = 0 AND created_at >= ?",
-      since24h,
-    ),
-    optimizerActions24h: count(
-      `SELECT COUNT(*) AS n FROM audit_log
-       WHERE action IN ('optimizer_previewed', 'optimizer_applied', 'optimizer_rolled_back')
-         AND created_at >= ?`,
-      since24h,
-    ),
-    catalogRequests24h: count(
-      "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'catalog_served' AND created_at >= ?",
-      since24h,
-    ),
-    revenue30Cents:
-      actor.role === "owner"
-        ? (db
-            .prepare(
-              "SELECT COALESCE(SUM(amount_cents), 0) AS n FROM orders WHERE status = 'paid' AND paid_at >= ?",
-            )
-            .get(since30d) as CountRow).n
-        : null,
-  };
+  const [users, totalUsers, siteOnlineIds, optimizerOnlineIds, siteSeen, optimizerSeen, audit, orders] =
+    await Promise.all([
+      listProfiles(1000),
+      countUsers(),
+      activeUserIds("web", onlineSince),
+      activeUserIds("api", onlineSince),
+      tokenSeen("web", now),
+      tokenSeen("api", now),
+      recentAudit(300),
+      listAllOrders(2000),
+    ]);
 
-  const people = db
-    .prepare(
-      `SELECT u.id, u.username, u.discord_username, u.discord_id, u.discord_avatar,
-              u.role, u.tier, u.status, u.client_version, u.client_seen_at,
-              (SELECT MAX(last_seen_at) FROM tokens
-               WHERE user_id = u.id AND kind = 'web' AND expires_at > ?) AS site_seen_at,
-              (SELECT MAX(last_seen_at) FROM tokens
-               WHERE user_id = u.id AND kind = 'api' AND expires_at > ?) AS optimizer_seen_at,
-              (SELECT MAX(created_at) FROM audit_log WHERE user_id = u.id) AS last_activity_at
-       FROM users u
-       ORDER BY MAX(COALESCE(site_seen_at, 0), COALESCE(optimizer_seen_at, 0),
-                    COALESCE(last_activity_at, 0), u.created_at) DESC
-       LIMIT 24`,
+  const counts = actionCounts(audit, since24h);
+  const paidOrders30 = orders.filter((order) => order.status === "paid" && (order.paid_at ?? 0) >= since30d);
+  const activeLicenses = users.filter((user) =>
+    user.status === "active" &&
+    (user.tier !== null || user.expires_at !== null) &&
+    (user.expires_at === null || user.expires_at > now)
+  ).length;
+
+  const activeCatalog = readCatalog().tweaks.filter(isTweakEnabled);
+  const usersById = new Map(users.map((user) => [user.id, user]));
+  const lastActivity = new Map<number, number>();
+  for (const entry of audit) {
+    if (entry.user_id === null) continue;
+    lastActivity.set(entry.user_id, Math.max(lastActivity.get(entry.user_id) ?? 0, entry.created_at));
+  }
+
+  const peopleBase = users
+    .map((user) => ({
+      user,
+      siteSeenAt: siteSeen.get(user.id) ?? null,
+      optimizerSeenAt: optimizerSeen.get(user.id) ?? user.client_seen_at ?? null,
+      lastActivityAt: lastActivity.get(user.id) ?? null,
+    }))
+    .sort((a, b) =>
+      Math.max(b.siteSeenAt ?? 0, b.optimizerSeenAt ?? 0, b.lastActivityAt ?? 0, b.user.created_at) -
+      Math.max(a.siteSeenAt ?? 0, a.optimizerSeenAt ?? 0, a.lastActivityAt ?? 0, a.user.created_at)
     )
-    .all(now, now) as Array<{
-      id: number;
-      username: string;
-      discord_username: string | null;
-      discord_id: string | null;
-      discord_avatar: string | null;
-      role: string;
-      tier: string | null;
-      status: string;
-      client_version: string | null;
-      client_seen_at: number | null;
-      site_seen_at: number | null;
-      optimizer_seen_at: number | null;
-      last_activity_at: number | null;
-    }>;
+    .slice(0, 24);
 
-  const financialActions = ["panel_refund", "order_paid", "order_created"];
-  const activity = db
-    .prepare(
-      `SELECT a.id, a.action, a.detail, a.created_at, u.id AS user_id,
-              u.username, u.discord_username
-       FROM audit_log a
-       LEFT JOIN users u ON u.id = a.user_id
-       ${actor.role === "owner" ? "" : `WHERE a.action NOT IN (${financialActions.map(() => "?").join(",")})`}
-       ORDER BY a.created_at DESC
-       LIMIT 30`,
-    )
-    .all(...(actor.role === "owner" ? [] : financialActions)) as Array<{
-      id: number;
-      action: string;
-      detail: string | null;
-      created_at: number;
-      user_id: number | null;
-      username: string | null;
-      discord_username: string | null;
-    }>;
+  const people = await Promise.all(peopleBase.map(async ({ user, siteSeenAt, optimizerSeenAt, lastActivityAt }) => {
+    const availableTweaks = filterTweaksForUser(user, activeCatalog).map((tweak) => ({
+      id: tweak.id,
+      name: tweak.name,
+      category: tweak.id.split(".")[0] || "system",
+      tier: minimumTierForTweak(tweak),
+      requiresReboot: tweak.requiresReboot,
+    }));
+    const activeTweaks = (await listActiveOptimizations(user.id)).map((item) => ({
+      id: item.id,
+      tweakId: item.tweak_id,
+      name: item.name,
+      category: item.category,
+      appliedAt: item.applied_at,
+      machine: item.machine_chassis || item.machine_gpu
+        ? [item.machine_chassis, item.machine_gpu].filter(Boolean).join(" · ")
+        : item.machine_hwid,
+      clientVersion: item.client_version,
+    }));
 
-  const usage = db
-    .prepare(
-      `SELECT action, COUNT(*) AS count
-       FROM audit_log
-       WHERE created_at >= ? AND action IN
-         ('catalog_served', 'optimizer_previewed', 'optimizer_applied',
-          'optimizer_rolled_back', 'login_ok', 'panel_login_ok')
-       GROUP BY action ORDER BY count DESC`,
-    )
-    .all(since24h) as Array<{ action: string; count: number }>;
+    return {
+      id: user.id,
+      username: user.username,
+      displayName: user.discord_username ?? user.username,
+      avatarUrl: user.discord_id ? avatarUrl(user.discord_id, user.discord_avatar) : null,
+      role: user.role,
+      tier: user.tier,
+      status: user.status,
+      clientVersion: user.client_version,
+      clientSeenAt: user.client_seen_at,
+      siteSeenAt,
+      optimizerSeenAt,
+      siteOnline: siteOnlineIds.has(user.id),
+      optimizerOnline: optimizerOnlineIds.has(user.id) || (user.client_seen_at ?? 0) >= onlineSince,
+      lastActivityAt,
+      availableOptimizations: availableTweaks,
+      activeOptimizations: activeTweaks,
+    };
+  }));
 
-  const versions = db
-    .prepare(
-      `SELECT COALESCE(client_version, 'Sem versao') AS version, COUNT(*) AS count
-       FROM users WHERE client_seen_at IS NOT NULL
-       GROUP BY client_version ORDER BY count DESC LIMIT 8`,
-    )
-    .all() as Array<{ version: string; count: number }>;
+  const usageKeys = new Set([
+    "catalog_served",
+    "optimizer_previewed",
+    "optimizer_applied",
+    "optimizer_rolled_back",
+    "login_ok",
+    "panel_login_ok",
+  ]);
+  const usage = Object.entries(counts)
+    .filter(([action]) => usageKeys.has(action))
+    .map(([action, count]) => ({ action, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const versionCounts = new Map<string, number>();
+  for (const user of users) {
+    if (!user.client_seen_at) continue;
+    const version = user.client_version ?? "Sem versao";
+    versionCounts.set(version, (versionCounts.get(version) ?? 0) + 1);
+  }
 
   return ok({
     generatedAt: now,
     onlineWindowSeconds: 300,
-    metrics,
-    people: people.map((person) => ({
-      id: person.id,
-      username: person.username,
-      displayName: person.discord_username ?? person.username,
-      avatarUrl: person.discord_id
-        ? avatarUrl(person.discord_id, person.discord_avatar)
+    metrics: {
+      users: totalUsers,
+      activeLicenses,
+      onlineSite: siteOnlineIds.size,
+      onlineOptimizer: optimizerOnlineIds.size,
+      failedLogins24h: await countFailedLogins(since24h),
+      optimizerActions24h:
+        (counts.optimizer_previewed ?? 0) +
+        (counts.optimizer_applied ?? 0) +
+        (counts.optimizer_rolled_back ?? 0),
+      catalogRequests24h: counts.catalog_served ?? 0,
+      revenue30Cents: actor.role === "owner"
+        ? paidOrders30.reduce((sum, order) => sum + order.amount_cents, 0)
         : null,
-      role: person.role,
-      tier: person.tier,
-      status: person.status,
-      clientVersion: person.client_version,
-      clientSeenAt: person.client_seen_at,
-      siteSeenAt: person.site_seen_at,
-      optimizerSeenAt: person.optimizer_seen_at,
-      siteOnline: (person.site_seen_at ?? 0) >= onlineSince,
-      optimizerOnline: (person.optimizer_seen_at ?? 0) >= onlineSince,
-      lastActivityAt: person.last_activity_at,
-    })),
-    activity: activity.map((entry) => ({
-      id: entry.id,
-      action: entry.action,
-      detail: entry.detail,
-      createdAt: entry.created_at,
-      userId: entry.user_id,
-      username: entry.discord_username ?? entry.username ?? "Sistema",
-    })),
+    },
+    people,
+    activity: audit.slice(0, 30).map((entry, index) => {
+      const user = entry.user_id === null ? null : usersById.get(entry.user_id);
+      return {
+        id: index + 1,
+        action: entry.action,
+        detail: entry.detail,
+        createdAt: entry.created_at,
+        userId: entry.user_id,
+        username: user?.discord_username ?? user?.username ?? "Sistema",
+      };
+    }),
     usage,
-    versions,
+    versions: [...versionCounts.entries()]
+      .map(([version, count]) => ({ version, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8),
   });
 }

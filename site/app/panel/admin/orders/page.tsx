@@ -8,8 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function OrdersPage() {
   await requireRole("owner");
 
-  const s = summary();
-  const orders = recentOrders(100);
+  const [s, orders] = await Promise.all([summary(), recentOrders(100)]);
 
   return (
     <>

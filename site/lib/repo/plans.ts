@@ -1,4 +1,6 @@
 import { firestore } from "../firebase-admin.ts";
+import { getDb } from "../db.ts";
+import { cached, invalidateCache } from "../cache.ts";
 import { allocateId } from "./ids.ts";
 import { COLLECTIONS, type Plan } from "./types.ts";
 
@@ -37,6 +39,8 @@ function normalizar(dados: Partial<Plan>, id: number): Plan {
     promo_text: dados.promo_text ?? null,
     features_json: dados.features_json ?? null,
     cta_text: dados.cta_text ?? null,
+    app_version: dados.app_version ?? null,
+    app_min_supported: dados.app_min_supported ?? null,
   };
 }
 
@@ -69,8 +73,25 @@ function doDocumento(dados: Record<string, unknown>, id: number): Plan {
 }
 
 export async function allPlans(): Promise<Plan[]> {
+  return cached("plans:all", 10_000, readAllPlans);
+}
+
+async function readAllPlans(): Promise<Plan[]> {
   const snap = await col().orderBy("sort_order").get();
-  return snap.docs.map((d) => doDocumento(d.data(), Number(d.id)));
+  if (!snap.empty) return snap.docs.map((d) => doDocumento(d.data(), Number(d.id)));
+
+  const sqlitePlans = getDb()
+    .prepare("SELECT * FROM plans ORDER BY sort_order, id")
+    .all() as Array<Record<string, unknown>>;
+  if (!sqlitePlans.length) return [];
+
+  const batch = firestore().batch();
+  const plans = sqlitePlans.map((row) => doDocumento(row, Number(row.id)));
+  for (const plan of plans) {
+    batch.set(col().doc(String(plan.id)), plan);
+  }
+  await batch.commit();
+  return plans;
 }
 
 export async function activePlans(): Promise<Plan[]> {
@@ -118,14 +139,20 @@ export async function createPlan(dados: Omit<Partial<Plan>, "id">): Promise<Plan
   const id = await allocateId(COLLECTIONS.plans);
   const plano = normalizar(dados, id);
   await col().doc(String(id)).set(plano);
+  invalidateCache("plans:");
+  invalidateCache("stats:");
   return plano;
 }
 
 export async function updatePlan(id: number, patch: Partial<Plan>): Promise<void> {
   const { id: _ignorado, ...campos } = patch;
   await col().doc(String(id)).set(campos, { merge: true });
+  invalidateCache("plans:");
+  invalidateCache("stats:");
 }
 
 export async function deletePlan(id: number): Promise<void> {
   await col().doc(String(id)).delete();
+  invalidateCache("plans:");
+  invalidateCache("stats:");
 }

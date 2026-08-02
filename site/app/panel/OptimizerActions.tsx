@@ -11,6 +11,7 @@ import {
   ExternalLink,
   RefreshCw,
   Sparkles,
+  X,
 } from "lucide-react";
 import type { OptimizerRelease } from "@/lib/optimizer-release";
 import { compareVersions, formatBytes, timeAgo, updateState } from "@/lib/version";
@@ -31,6 +32,7 @@ import { compareVersions, formatBytes, timeAgo, updateState } from "@/lib/versio
 
 /** Ao fim disto propoe-se o instalador manual: algo correu mal em silencio. */
 const SEGUNDOS_ATE_ALTERNATIVA = 45;
+const SEGUNDOS_ENTRE_VERIFICACOES = 8;
 // A 1.1.1 foi distribuida com o atualizador antigo em alguns ambientes.
 // Ate a 1.1.2 estar instalada, usar sempre o setup publicado na Release.
 const VERSAO_COM_FEED_DE_UPDATE = "1.1.2";
@@ -40,15 +42,19 @@ type Fase = "parado" | "a-atualizar" | "concluida";
 export default function OptimizerActions({
   installedVersion,
   release,
+  dismissible = false,
 }: {
   installedVersion: string | null;
   release: OptimizerRelease;
+  dismissible?: boolean;
 }) {
   const router = useRouter();
   const reduzirMovimento = useReducedMotion();
   const [origin, setOrigin] = useState("");
+  const [quando, setQuando] = useState<string | null>(null);
   const [fase, setFase] = useState<Fase>("parado");
   const [segundos, setSegundos] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
   const versaoAoIniciar = useRef<string | null>(null);
 
   const estado = updateState(release, installedVersion);
@@ -62,7 +68,30 @@ export default function OptimizerActions({
     installedVersion && compareVersions(installedVersion, VERSAO_COM_FEED_DE_UPDATE) >= 0,
   );
 
-  useEffect(() => setOrigin(window.location.origin), []);
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    setQuando(timeAgo(release.releasedAt));
+    setDismissed(false);
+  }, [release.releasedAt, release.version]);
+
+  // O manifesto e as regras por plano/cargo podem mudar no painel admin
+  // enquanto o cliente tem o dashboard aberto. Refrescar os dados de servidor
+  // mantem o popup sincronizado sem obrigar a recarregar a pagina.
+  useEffect(() => {
+    if (fase === "a-atualizar") return;
+    const timer = window.setInterval(() => router.refresh(), SEGUNDOS_ENTRE_VERIFICACOES * 1000);
+    const aoFocar = () => router.refresh();
+    const aoVisivel = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    window.addEventListener("focus", aoFocar);
+    document.addEventListener("visibilitychange", aoVisivel);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", aoFocar);
+      document.removeEventListener("visibilitychange", aoVisivel);
+    };
+  }, [fase, router]);
 
   // Enquanto atualiza: refrescar para o servidor dizer a versao instalada,
   // e contar o tempo para poder oferecer alternativa se encravar.
@@ -100,8 +129,9 @@ export default function OptimizerActions({
   }, [origin, release]);
 
   const tamanho = formatBytes(release.sizeBytes);
-  const quando = timeAgo(release.releasedAt);
   const anim = reduzirMovimento ? {} : undefined;
+
+  if (dismissible && dismissed && fase === "parado") return null;
 
   // --- Actualizada: nao roubar espaco a quem nao tem nada a fazer -------
   if (!desactualizado && fase === "parado") {
@@ -127,12 +157,24 @@ export default function OptimizerActions({
       initial={reduzirMovimento ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-      className={`w-full max-w-md overflow-hidden rounded-2xl border bg-[var(--panel-surface)] ${
+      className={`update-popup relative w-full max-w-md overflow-hidden rounded-2xl border bg-[var(--panel-surface)] ${
         obrigatoria
           ? "border-[var(--warning)]/40"
           : "border-[var(--chart-1)]/25"
       }`}
     >
+      {dismissible && fase === "parado" && (
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-black/30 text-white/40 backdrop-blur transition-colors hover:border-[var(--chart-1)]/35 hover:bg-[var(--chart-1)]/10 hover:text-white"
+          aria-label="Fechar pop-up de atualização"
+          title="Fechar"
+        >
+          <X size={15} />
+        </button>
+      )}
+
       {/* Faixa superior: da cor ao cartao sem pintar o fundo todo. */}
       <div
         className={`h-[3px] w-full ${
@@ -142,7 +184,7 @@ export default function OptimizerActions({
         }`}
       />
 
-      <div className="p-5">
+      <div className={dismissible ? "p-5 pr-12" : "p-5"}>
         <AnimatePresence mode="wait" initial={false}>
           {fase === "concluida" ? (
             <Concluida key="ok" versao={installedVersion ?? release.version} reduzir={!!reduzirMovimento} />

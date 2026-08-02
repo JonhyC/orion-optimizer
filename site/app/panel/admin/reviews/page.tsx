@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/session";
-import { getDb } from "@/lib/db";
+import { allReviews } from "@/lib/repo/reviews";
 import { dateTime } from "@/lib/stats";
 import { Card } from "@/components/panel/Pieces";
 import { setReviewApprovedAction } from "../../actions";
@@ -21,9 +21,9 @@ type Row = {
 export default async function ReviewsPage() {
   await requireRole("staff");
 
-  const rows = getDb()
-    .prepare("SELECT * FROM reviews ORDER BY approved ASC, created_at DESC")
-    .all() as Row[];
+  // Ja vem ordenado por aprovar primeiro, depois pelas mais recentes -
+  // a mesma ordem que o SQLite dava.
+  const rows: Row[] = await allReviews();
 
   const pending = rows.filter((r) => !r.approved);
   const live = rows.filter((r) => r.approved);

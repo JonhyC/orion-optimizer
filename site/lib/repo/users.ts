@@ -109,6 +109,24 @@ export async function findProfileByDiscordId(discordId: string): Promise<UserPro
   return primeiroPorCampo("discord_id", discordId);
 }
 
+/**
+ * Contas com plano cujo prazo ja passou.
+ *
+ * O SQLite fazia `tier IS NOT NULL AND expires_at <= ?` numa so condicao.
+ * O Firestore nao combina duas desigualdades em campos diferentes, por
+ * isso filtra-se por expires_at (que tem indice) e descarta-se em memoria
+ * quem nao tem plano. Sao poucas contas de cada vez.
+ */
+export async function expiredPlanUsers(agoraSegundos: number): Promise<UserProfile[]> {
+  const snap = await col()
+    .where("expires_at", "<=", agoraSegundos)
+    .get();
+
+  return snap.docs
+    .map((d) => normalizar(d.data() as Partial<UserProfile>, Number(d.id)))
+    .filter((u) => u.tier !== null && u.expires_at !== null);
+}
+
 export async function listProfiles(limite = 500): Promise<UserProfile[]> {
   const snap = await col().orderBy("created_at", "desc").limit(limite).get();
   return snap.docs.map((d) => normalizar(d.data() as Partial<UserProfile>, Number(d.id)));
@@ -117,6 +135,25 @@ export async function listProfiles(limite = 500): Promise<UserProfile[]> {
 export async function countUsers(): Promise<number> {
   const snap = await col().count().get();
   return snap.data().count;
+}
+
+/**
+ * Contagens da pagina publica.
+ *
+ * Usa aggregation queries: devolvem so o numero, sem trazer os documentos.
+ * O Firestore cobra uma leitura por cada 1000 documentos varridos em vez
+ * de uma por documento - e isto corre em cada visita a pagina inicial.
+ *
+ * As duas contagens vao em paralelo por serem independentes.
+ */
+export async function countClients(): Promise<{ total: number; comMaquina: number }> {
+  const [total, comMaquina] = await Promise.all([
+    col().where("role", "==", "client").count().get(),
+    // "PCs optimizados" = licencas que chegaram a ligar-se a uma maquina.
+    // Contar encomendas seria inflacionar: uma renovacao nao e um PC novo.
+    col().where("role", "==", "client").where("hwid", "!=", null).count().get(),
+  ]);
+  return { total: total.data().count, comMaquina: comMaquina.data().count };
 }
 
 // ------------------------------------------------------------------ escrita

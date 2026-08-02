@@ -5,7 +5,6 @@ import "./globals.css";
 import SmoothScroll from "@/components/providers/SmoothScroll";
 import Cursor from "@/components/ui/Cursor";
 import ScrollProgress from "@/components/ui/ScrollProgress";
-import Spotlight from "@/components/ui/Spotlight";
 import PageLoader from "@/components/ui/PageLoader";
 
 const inter = Inter({
@@ -22,7 +21,7 @@ const sora = Sora({
 });
 
 export const metadata: Metadata = {
-  title: "Orion Optimizer — Unlock Your PC's True Performance",
+  title: "Orion Optimizer 2.0 — Unlock Your PC's True Performance",
   description:
     "Professional Windows optimization for gamers. More FPS, less input lag, maximum performance. Every change measured, logged and fully reversible.",
   keywords: [
@@ -34,7 +33,7 @@ export const metadata: Metadata = {
     "debloat Windows",
   ],
   openGraph: {
-    title: "Orion Optimizer — Unlock Your PC's True Performance",
+    title: "Orion Optimizer 2.0 — Unlock Your PC's True Performance",
     description:
       "More FPS. Less Input Lag. Maximum Performance. Professional Windows optimization with full rollback.",
     type: "website",
@@ -54,10 +53,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${inter.variable} ${sora.variable}`}>
-      <body className="bg-void">
+      <body className="bg-void" style={{ backgroundColor: "#000000" }}>
         <PageLoader />
         <ScrollProgress />
-        <Spotlight />
         <Cursor />
         <SmoothScroll>{children}</SmoothScroll>
       </body>

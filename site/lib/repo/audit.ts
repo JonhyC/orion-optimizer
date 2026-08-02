@@ -69,6 +69,28 @@ export async function auditForUser(userId: number, limite = 20): Promise<AuditEn
   return snap.docs.map((d) => d.data() as AuditEntry);
 }
 
+/**
+ * Ultima vez que um utilizador fez uma accao concreta.
+ *
+ * Usado para arrefecimentos - por exemplo, so deixar trocar de computador
+ * uma vez por dia. Precisa do indice composto (user_id, created_at) que
+ * esta declarado em firestore.indexes.json.
+ */
+export async function lastAuditFor(
+  userId: number,
+  action: string,
+): Promise<AuditEntry | null> {
+  const snap = await firestore()
+    .collection(COLLECTIONS.audit)
+    .where("user_id", "==", userId)
+    .where("action", "==", action)
+    .orderBy("created_at", "desc")
+    .limit(1)
+    .get();
+
+  return snap.empty ? null : (snap.docs[0].data() as AuditEntry);
+}
+
 /** Quantas vezes cada accao ocorreu desde `desde`. Para o painel. */
 export async function auditCountsSince(desde: number): Promise<Record<string, number>> {
   const snap = await firestore()
@@ -108,6 +130,39 @@ export async function countRecentFailures(
     .count()
     .get();
   return snap.data().count;
+}
+
+/**
+ * Ultimo login com sucesso e total de falhas de um utilizador.
+ *
+ * O painel de administracao mostra isto na ficha de cada conta. Substitui
+ * o MAX(CASE WHEN...) / SUM(CASE WHEN...) que o SQLite fazia numa query:
+ * o Firestore nao tem agregacoes condicionais, portanto le-se as
+ * tentativas do utilizador e percorre-se em memoria.
+ *
+ * As tentativas antigas sao apagadas por purgeAttemptsBefore, portanto
+ * este conjunto mantem-se pequeno.
+ */
+export async function loginStatsFor(
+  username: string,
+): Promise<{ last_success: number | null; failed_total: number }> {
+  const snap = await firestore()
+    .collection(COLLECTIONS.attempts)
+    .where("username", "==", username)
+    .get();
+
+  let last_success: number | null = null;
+  let failed_total = 0;
+
+  for (const doc of snap.docs) {
+    const a = doc.data() as LoginAttempt;
+    if (a.success === 1) {
+      if (last_success === null || a.created_at > last_success) last_success = a.created_at;
+    } else {
+      failed_total++;
+    }
+  }
+  return { last_success, failed_total };
 }
 
 export async function recordAttempt(

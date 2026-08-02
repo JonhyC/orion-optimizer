@@ -31,7 +31,7 @@ export default function LoginForm({
         <>
           <a
             href="/api/auth/discord"
-            className="flex w-full items-center justify-center gap-3 rounded-xl bg-[#5865F2] py-4 text-[15px] font-semibold text-white shadow-lg shadow-[#5865F2]/25 transition-all hover:bg-[#4752c4] hover:shadow-[#5865F2]/40"
+            className="flex w-full items-center justify-center gap-3 rounded-xl bg-[var(--chart-1)] py-4 text-[15px] font-semibold text-[#120d05] shadow-lg shadow-[var(--chart-1)]/20 transition-all hover:bg-[#e8c37c] hover:shadow-[var(--chart-1)]/35"
           >
             <DiscordMark />
             Entrar com Discord
@@ -46,7 +46,7 @@ export default function LoginForm({
         <>
           <div
             aria-disabled
-            className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl bg-[#5865F2]/20 py-4 text-[15px] font-semibold text-white/35"
+            className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl bg-[var(--chart-1)]/15 py-4 text-[15px] font-semibold text-white/35"
           >
             <DiscordMark />
             Entrar com Discord

@@ -1,5 +1,14 @@
-import { audit, getDb, nowSeconds } from "./db.ts";
+import { audit } from "./repo/audit.ts";
 import { discordConfig, syncDiscordPlanRoles } from "./discord.ts";
+import { expiredPlanUsers, findProfileById, updateProfile } from "./repo/users.ts";
+import { revokeClientTokens } from "./repo/tokens.ts";
+import {
+  clearRoleSync,
+  countPendingRoleSyncs,
+  pendingRoleSyncs,
+  queueRoleSync,
+  recordRoleSyncFailure,
+} from "./repo/role-sync.ts";
 
 export type ExpiryResult = {
   expired: number;
@@ -7,86 +16,65 @@ export type ExpiryResult = {
   discordPending: number;
 };
 
-type PendingSync = {
-  user_id: number;
-  discord_id: string;
-  tier: string | null;
-  attempts: number;
-  remove_role_id: string | null;
-  updated_at: number;
-};
+const agora = () => Math.floor(Date.now() / 1000);
 
 /** Regista o estado desejado; uma nova alteracao substitui uma tentativa antiga. */
-export function queueDiscordRoleSync(
+export async function queueDiscordRoleSync(
   userId: number,
   tier: string | null,
   reason: string,
   removeRoleId: string | null = null,
-): void {
-  const db = getDb();
-  const linked = db.prepare("SELECT discord_id FROM users WHERE id = ?").get(userId) as
-    | { discord_id: string | null }
-    | undefined;
-  if (!linked?.discord_id) return;
+): Promise<void> {
+  // Sem conta Discord ligada nao ha cargo nenhum para sincronizar.
+  const perfil = await findProfileById(userId);
+  if (!perfil?.discord_id) return;
 
-  db.prepare(
-    `INSERT INTO discord_role_sync
-       (user_id, tier, reason, attempts, last_error, remove_role_id, updated_at)
-     VALUES (?, ?, ?, 0, NULL, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       tier = excluded.tier, reason = excluded.reason, attempts = 0,
-       last_error = NULL,
-       remove_role_id = COALESCE(excluded.remove_role_id, discord_role_sync.remove_role_id),
-       updated_at = excluded.updated_at`,
-  ).run(userId, tier, reason, removeRoleId, nowSeconds());
+  await queueRoleSync({ userId, tier, reason, removeRoleId });
 }
 
 export async function flushDiscordRoleSync(limit = 25): Promise<{
   synced: number;
   pending: number;
 }> {
-  const db = getDb();
-  const pendingCount = () =>
-    Number(
-      (db.prepare("SELECT COUNT(*) AS total FROM discord_role_sync").get() as { total: number })
-        .total,
-    );
+  if (!discordConfig()?.botToken) {
+    return { synced: 0, pending: await countPendingRoleSyncs() };
+  }
 
-  if (!discordConfig()?.botToken) return { synced: 0, pending: pendingCount() };
-
-  const now = nowSeconds();
-  const rows = db
-    .prepare(
-      `SELECT q.user_id, q.tier, q.attempts, q.remove_role_id, q.updated_at, u.discord_id
-       FROM discord_role_sync q JOIN users u ON u.id = q.user_id
-       WHERE u.discord_id IS NOT NULL ORDER BY q.updated_at ASC LIMIT ?`,
-    )
-    .all(limit) as PendingSync[];
+  const now = agora();
+  const fila = await pendingRoleSyncs(limit);
 
   let synced = 0;
-  for (const row of rows) {
-    const retryDelay = Math.min(3600, 60 * 2 ** Math.min(row.attempts, 6));
-    if (row.attempts > 0 && row.updated_at + retryDelay > now) continue;
+  for (const entrada of fila) {
+    // Espera exponencial entre tentativas, ate uma hora. Sem isto, uma
+    // conta que falha sempre seria repetida a cada pedido ao site.
+    const atraso = Math.min(3600, 60 * 2 ** Math.min(entrada.attempts, 6));
+    if (entrada.attempts > 0 && entrada.updated_at + atraso > now) continue;
+
+    // O discord_id vive no perfil, nao na fila: o SQLite fazia JOIN, aqui
+    // e uma leitura por entrada. A fila e curta (25 no maximo).
+    const perfil = await findProfileById(entrada.user_id);
+    if (!perfil?.discord_id) {
+      // A conta perdeu a ligacao ao Discord: nao ha nada a sincronizar e
+      // deixar a entrada na fila fazia-a ser tentada para sempre.
+      await clearRoleSync(entrada.user_id);
+      continue;
+    }
 
     try {
       await syncDiscordPlanRoles(
-        row.discord_id,
-        row.tier,
-        row.remove_role_id ? [row.remove_role_id] : [],
+        perfil.discord_id,
+        entrada.tier,
+        entrada.remove_role_id ? [entrada.remove_role_id] : [],
       );
-      db.prepare("DELETE FROM discord_role_sync WHERE user_id = ?").run(row.user_id);
-      audit(row.user_id, "discord_plan_roles_synced", row.tier ?? "member");
+      await clearRoleSync(entrada.user_id);
+      audit(entrada.user_id, "discord_plan_roles_synced", entrada.tier ?? "member");
       synced++;
     } catch (error) {
-      const message = (error as Error).message.slice(0, 500);
-      db.prepare(
-        `UPDATE discord_role_sync SET attempts = attempts + 1, last_error = ?, updated_at = ?
-         WHERE user_id = ?`,
-      ).run(message, nowSeconds(), row.user_id);
+      await recordRoleSyncFailure(entrada.user_id, (error as Error).message);
     }
   }
 
-  return { synced, pending: pendingCount() };
+  return { synced, pending: await countPendingRoleSyncs() };
 }
 
 /**
@@ -94,51 +82,46 @@ export async function flushDiscordRoleSync(limit = 25): Promise<{
  * falha externa nunca prolonga o acesso ao optimizer.
  */
 export async function processExpiredPlans(): Promise<ExpiryResult> {
-  const db = getDb();
-  const now = nowSeconds();
-  const expired = db
-    .prepare(
-      `SELECT id, username, tier, discord_id FROM users
-       WHERE tier IS NOT NULL AND expires_at IS NOT NULL AND expires_at <= ?`,
-    )
-    .all(now) as Array<{
-    id: number;
-    username: string;
-    tier: string;
-    discord_id: string | null;
-  }>;
+  const now = agora();
+  const expirados = await expiredPlanUsers(now);
 
-  if (expired.length > 0) {
-    db.exec("BEGIN IMMEDIATE");
+  for (const user of expirados) {
+    // Cada conta e tratada por si. O SQLite envolvia tudo numa transaccao,
+    // mas aqui sao documentos independentes: falhar numa nao pode impedir
+    // que as outras percam o plano, que e o que protege o acesso.
     try {
-      for (const user of expired) {
-        db.prepare(
-          `UPDATE users SET tier = NULL, tier_source = 'manual',
-           role = CASE WHEN role = 'client' THEN 'member' ELSE role END
-           WHERE id = ? AND tier IS NOT NULL AND expires_at IS NOT NULL AND expires_at <= ?`,
-        ).run(user.id, now);
-        db.prepare("DELETE FROM tokens WHERE user_id = ? AND kind = 'api'").run(user.id);
-        if (user.discord_id) {
-          db.prepare(
-            `INSERT INTO discord_role_sync
-               (user_id, tier, reason, attempts, last_error, remove_role_id, updated_at)
-             VALUES (?, NULL, 'plan_expired', 0, NULL, NULL, ?)
-             ON CONFLICT(user_id) DO UPDATE SET tier = NULL, reason = 'plan_expired',
-               attempts = 0, last_error = NULL, updated_at = excluded.updated_at`,
-          ).run(user.id, now);
-        }
-        audit(user.id, "plan_expired", `${user.tier} / ${user.username}`);
+      await updateProfile(user.id, {
+        tier: null,
+        tier_source: "manual",
+        // Quem era cliente por ter plano volta a ser membro. Cargos
+        // internos (staff, developer, owner) nao sao tocados.
+        role: user.role === "client" ? "member" : user.role,
+      });
+
+      // Corta o cliente Windows de imediato; a sessao do site sobrevive,
+      // para a pessoa poder entrar e renovar.
+      await revokeClientTokens(user.id);
+
+      if (user.discord_id) {
+        await queueRoleSync({
+          userId: user.id,
+          tier: null,
+          reason: "plan_expired",
+          removeRoleId: null,
+        });
       }
-      db.exec("COMMIT");
+      audit(user.id, "plan_expired", `${user.tier} / ${user.username}`);
     } catch (error) {
-      db.exec("ROLLBACK");
-      throw error;
+      console.error(
+        `[orion] falha a expirar o plano do utilizador ${user.id}:`,
+        (error as Error).message,
+      );
     }
   }
 
   const discord = await flushDiscordRoleSync();
   return {
-    expired: expired.length,
+    expired: expirados.length,
     discordSynced: discord.synced,
     discordPending: discord.pending,
   };

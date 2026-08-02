@@ -146,15 +146,41 @@ async function apagarPorQuery(query: FirebaseFirestore.Query): Promise<number> {
 export async function activeUserIds(kind: TokenKind, desde: number): Promise<Set<number>> {
   const snap = await col()
     .where("kind", "==", kind)
-    .where("expires_at", ">", nowSeconds())
     .get();
 
+  const now = nowSeconds();
   const ids = new Set<number>();
   for (const doc of snap.docs) {
     const t = doc.data() as Token;
+    if (t.expires_at <= now) continue;
     if ((t.last_seen_at ?? 0) >= desde) ids.add(t.user_id);
   }
   return ids;
+}
+
+/**
+ * Sessoes vivas de um utilizador, separadas por tipo.
+ *
+ * O painel de administracao mostra isto por conta: quantas sessoes de site
+ * e quantos clientes Windows estao ligados. Substitui o SUM(CASE WHEN...)
+ * que o SQLite fazia numa query - aqui le-se os tokens do utilizador (sao
+ * poucos) e conta-se em memoria, o que evita duas queries agregadas.
+ */
+export async function countActiveByUser(
+  userId: number,
+): Promise<{ optimizer: number; website: number }> {
+  const snap = await col().where("user_id", "==", userId).get();
+  const agora = nowSeconds();
+
+  let optimizer = 0;
+  let website = 0;
+  for (const doc of snap.docs) {
+    const t = doc.data() as Token;
+    if (t.expires_at <= agora) continue;
+    if (t.kind === "api") optimizer++;
+    else if (t.kind === "web") website++;
+  }
+  return { optimizer, website };
 }
 
 /**

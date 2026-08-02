@@ -106,5 +106,15 @@ function fromSqlite(): PublicPlan[] {
 }
 
 export async function activePlans(): Promise<PublicPlan[]> {
-  return firebaseConfigured() ? fromFirestore() : fromSqlite();
+  if (!firebaseConfigured()) return fromSqlite();
+
+  try {
+    return await fromFirestore();
+  } catch (error) {
+    console.warn(
+      "[plans] Firestore indisponivel; a usar fallback SQLite para planos publicos.",
+      error,
+    );
+    return fromSqlite();
+  }
 }

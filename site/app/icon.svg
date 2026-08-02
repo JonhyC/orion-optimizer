@@ -1,19 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Orion Optimizer 2.0">
   <defs>
-    <linearGradient id="metal" x1="0.1" y1="0" x2="0.85" y2="1">
+    <linearGradient id="or-white" x1="0.1" y1="0" x2="0.9" y2="1">
       <stop offset="0" stop-color="#fff"/>
-      <stop offset="0.52" stop-color="#d8d9e0"/>
+      <stop offset="0.55" stop-color="#d9d9d9"/>
       <stop offset="1" stop-color="#fff"/>
     </linearGradient>
-    <linearGradient id="violet" x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0" stop-color="#6422c7"/>
-      <stop offset="0.52" stop-color="#8b3dff"/>
-      <stop offset="1" stop-color="#b78aff"/>
-    </linearGradient>
   </defs>
-  <rect width="200" height="200" rx="36" fill="#040408"/>
-  <circle cx="98" cy="101" r="55" fill="none" stroke="url(#metal)" stroke-width="18" stroke-dasharray="245 101" transform="rotate(36 98 101)"/>
-  <path d="M151 122A57 57 0 0 1 112 157" fill="none" stroke="url(#violet)" stroke-width="18"/>
-  <ellipse cx="99" cy="107" rx="82" ry="25" fill="none" stroke="url(#violet)" stroke-width="5" transform="rotate(-14 99 107)"/>
-  <path d="M163 22L108 81 122 92 83 129 105 94 91 84Z" fill="url(#violet)"/>
+  <path d="M99 38c-38.7 0-70 31.3-70 70s31.3 70 70 70c15.5 0 29.8-5 41.4-13.5l-19-19A43.6 43.6 0 0 1 99 152c-24.3 0-44-19.7-44-44s19.7-44 44-44s44 19.7 44 44c0 10-3.3 19.2-9 26.6l18.6 18.6A69.8 69.8 0 0 0 99 38Z" fill="url(#or-white)"/>
+  <path d="M49 95h68c22.5 0 41 18.5 41 41c0 11.8-5 22.4-13 29.8L167 188h-38l-51-51h37c8.8 0 16-7.2 16-16s-7.2-16-16-16H61L49 95Z" fill="url(#or-white)"/>
+  <path d="M27 95h22v26H27z" fill="url(#or-white)"/>
 </svg>

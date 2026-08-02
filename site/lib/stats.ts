@@ -1,4 +1,9 @@
-import { getDb, nowSeconds } from "./db.ts";
+import { nowSeconds } from "./db.ts";
+import { cached } from "./cache.ts";
+import { listAllOrders, listOrdersForUser, listRecentOrders } from "./repo/orders.ts";
+import { allPlans } from "./repo/plans.ts";
+import { countUsers, listProfiles } from "./repo/users.ts";
+import type { Order, Plan, UserProfile } from "./repo/types.ts";
 
 /**
  * Agregacoes do painel.
@@ -9,6 +14,7 @@ import { getDb, nowSeconds } from "./db.ts";
  */
 
 const DAY = 86400;
+const ADMIN_STATS_CACHE_MS = 8_000;
 
 export type Point = { date: string; label: string; value: number };
 
@@ -26,15 +32,35 @@ export type Summary = {
   ordersByStatus: Record<string, number>;
 };
 
-export function summary(): Summary {
-  const db = getDb();
+function cachedOrders(): Promise<Order[]> {
+  return cached("stats:orders:1000", ADMIN_STATS_CACHE_MS, () => listAllOrders());
+}
+
+function cachedProfiles(): Promise<UserProfile[]> {
+  return cached("stats:profiles:1000", ADMIN_STATS_CACHE_MS, () => listProfiles(1000));
+}
+
+function cachedUserCount(): Promise<number> {
+  return cached("stats:users:count", ADMIN_STATS_CACHE_MS, countUsers);
+}
+
+function cachedPlans(): Promise<Plan[]> {
+  return cached("stats:plans", ADMIN_STATS_CACHE_MS, allPlans);
+}
+
+export async function summary(): Promise<Summary> {
   const now = nowSeconds();
   const since30 = now - 30 * DAY;
   const prev30 = now - 60 * DAY;
-
-  const paid = db
-    .prepare("SELECT amount_cents, paid_at FROM orders WHERE status = 'paid'")
-    .all() as Array<{ amount_cents: number; paid_at: number }>;
+  const [orders, users, totalUsers] = await Promise.all([
+    cachedOrders(),
+    cachedProfiles(),
+    cachedUserCount(),
+  ]);
+  const paid = orders.filter(
+    (order): order is Order & { paid_at: number } =>
+      order.status === "paid" && order.paid_at !== null,
+  );
 
   let total = 0;
   let last30 = 0;
@@ -49,38 +75,20 @@ export function summary(): Summary {
   // Licenca ativa = tem plano ou validade gravada, E essa validade nao passou.
   // A primeira condicao e o que impede um owner sem uma unica compra
   // (expires_at a NULL) de contar como licenca permanente.
-  const activeLicenses = (
-    db
-      .prepare(
-        `SELECT COUNT(*) AS n FROM users
-         WHERE status = 'active'
-           AND (tier IS NOT NULL OR expires_at IS NOT NULL)
-           AND (expires_at IS NULL OR expires_at > ?)`,
-      )
-      .get(now) as { n: number }
-  ).n;
-
-  const clientsTotal = (
-    db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'client'").get() as { n: number }
-  ).n;
-
-  const clientsNew30 = (
-    db
-      .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'client' AND created_at >= ?")
-      .get(since30) as { n: number }
-  ).n;
-
-  const refundedTotal = (
-    db
-      .prepare("SELECT COALESCE(SUM(amount_cents), 0) AS s FROM orders WHERE status = 'refunded'")
-      .get() as { s: number }
-  ).s;
+  const activeLicenses = users.filter((user) =>
+    user.status === "active" &&
+    (user.tier !== null || user.expires_at !== null) &&
+    (user.expires_at === null || user.expires_at > now)
+  ).length;
+  const clientsTotal = users.filter((user) => user.role === "client").length;
+  const clientsNew30 = users.filter((user) => user.role === "client" && user.created_at >= since30).length;
+  const refundedTotal = orders
+    .filter((order) => order.status === "refunded")
+    .reduce((sum, order) => sum + order.amount_cents, 0);
 
   const ordersByStatus: Record<string, number> = {};
-  for (const r of db
-    .prepare("SELECT status, COUNT(*) AS n FROM orders GROUP BY status")
-    .all() as Array<{ status: string; n: number }>) {
-    ordersByStatus[r.status] = r.n;
+  for (const order of orders) {
+    ordersByStatus[order.status] = (ordersByStatus[order.status] ?? 0) + 1;
   }
 
   return {
@@ -92,14 +100,13 @@ export function summary(): Summary {
     ordersPaid: paid.length,
     avgOrder: paid.length ? Math.round(total / paid.length) : 0,
     activeLicenses,
-    clientsTotal,
+    clientsTotal: Math.max(clientsTotal, totalUsers ? clientsTotal : 0),
     clientsNew30,
     ordersByStatus,
   };
 }
 
-export function dailySeries(what: "revenue" | "signups" | "orders", days = 30): Point[] {
-  const db = getDb();
+export async function dailySeries(what: "revenue" | "signups" | "orders", days = 30): Promise<Point[]> {
   const buckets = new Map<string, number>();
 
   const midnight = new Date();
@@ -112,18 +119,20 @@ export function dailySeries(what: "revenue" | "signups" | "orders", days = 30): 
 
   const from = Math.floor((midnight.getTime() - (days - 1) * DAY * 1000) / 1000);
 
-  const rows =
-    what === "revenue"
-      ? (db
-          .prepare("SELECT paid_at AS t, amount_cents AS v FROM orders WHERE status = 'paid' AND paid_at >= ?")
-          .all(from) as Array<{ t: number; v: number }>)
-      : what === "signups"
-        ? (db
-            .prepare("SELECT created_at AS t, 1 AS v FROM users WHERE role = 'client' AND created_at >= ?")
-            .all(from) as Array<{ t: number; v: number }>)
-        : (db
-            .prepare("SELECT created_at AS t, 1 AS v FROM orders WHERE created_at >= ?")
-            .all(from) as Array<{ t: number; v: number }>);
+  const rows = what === "signups"
+    ? (await cachedProfiles())
+      .filter((user) => user.role === "client" && user.created_at >= from)
+      .map((user) => ({ t: user.created_at, v: 1 }))
+    : (await cachedOrders())
+      .filter((order) =>
+        what === "revenue"
+          ? order.status === "paid" && order.paid_at !== null && order.paid_at >= from
+          : order.created_at >= from
+      )
+      .map((order) => ({
+        t: what === "revenue" ? order.paid_at! : order.created_at,
+        v: what === "revenue" ? order.amount_cents : 1,
+      }));
 
   for (const r of rows) {
     const key = isoDate(new Date(r.t * 1000));
@@ -139,16 +148,17 @@ export function dailySeries(what: "revenue" | "signups" | "orders", days = 30): 
 
 export type PlanRow = { name: string; orders: number; revenue: number };
 
-export function revenueByPlan(): PlanRow[] {
-  return getDb()
-    .prepare(
-      `SELECT p.name AS name, COUNT(o.id) AS orders, COALESCE(SUM(o.amount_cents), 0) AS revenue
-       FROM plans p
-       LEFT JOIN orders o ON o.plan_id = p.id AND o.status = 'paid'
-       GROUP BY p.id, p.name
-       ORDER BY revenue DESC`,
-    )
-    .all() as PlanRow[];
+export async function revenueByPlan(): Promise<PlanRow[]> {
+  const [plans, orders] = await Promise.all([cachedPlans(), cachedOrders()]);
+  const rows = plans.map((plan) => {
+    const paid = orders.filter((order) => order.plan_id === plan.id && order.status === "paid");
+    return {
+      name: plan.name,
+      orders: paid.length,
+      revenue: paid.reduce((sum, order) => sum + order.amount_cents, 0),
+    };
+  });
+  return rows.sort((a, b) => b.revenue - a.revenue);
 }
 
 export type OrderRow = {
@@ -163,31 +173,26 @@ export type OrderRow = {
   paid_at: number | null;
 };
 
-export function recentOrders(limit = 10): OrderRow[] {
-  return getDb()
-    .prepare(
-      `SELECT o.id, u.username, p.name AS plan_name, o.amount_cents, o.currency,
-              o.status, o.provider, o.created_at, o.paid_at
-       FROM orders o
-       JOIN users u ON u.id = o.user_id
-       JOIN plans p ON p.id = o.plan_id
-       ORDER BY o.created_at DESC LIMIT ?`,
-    )
-    .all(Math.max(1, Math.min(200, limit))) as OrderRow[];
+function toOrderRow(order: Order): OrderRow {
+  return {
+    id: order.id,
+    username: order.username,
+    plan_name: order.plan_name,
+    amount_cents: order.amount_cents,
+    currency: order.currency,
+    status: order.status,
+    provider: order.provider,
+    created_at: order.created_at,
+    paid_at: order.paid_at,
+  };
 }
 
-export function ordersForUser(userId: number): OrderRow[] {
-  return getDb()
-    .prepare(
-      `SELECT o.id, u.username, p.name AS plan_name, o.amount_cents, o.currency,
-              o.status, o.provider, o.created_at, o.paid_at
-       FROM orders o
-       JOIN users u ON u.id = o.user_id
-       JOIN plans p ON p.id = o.plan_id
-       WHERE o.user_id = ?
-       ORDER BY o.created_at DESC`,
-    )
-    .all(userId) as OrderRow[];
+export async function recentOrders(limit = 10): Promise<OrderRow[]> {
+  return (await cached(`stats:recent-orders:${limit}`, ADMIN_STATS_CACHE_MS, () => listRecentOrders(limit))).map(toOrderRow);
+}
+
+export async function ordersForUser(userId: number): Promise<OrderRow[]> {
+  return (await listOrdersForUser(userId)).map(toOrderRow);
 }
 
 // ------------------------------------------------------------------ formato

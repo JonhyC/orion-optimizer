@@ -17,11 +17,15 @@ import Footer from "@/components/sections/Footer";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const stats = publicStats();
-  const reviews = publishedReviews();
-  // activePlans passou a assincrono ao sair do SQLite: o Firestore so
-  // responde por rede. Vai em paralelo com a sessao para nao somar esperas.
-  const [plans, user] = await Promise.all([activePlans(), currentUser()]);
+  // Tudo isto saiu do SQLite e passou a responder por rede. As quatro
+  // leituras sao independentes: em serie somavam quatro idas ao Firestore
+  // (~93ms cada) ao tempo de abertura da pagina inicial.
+  const [stats, reviews, plans, user] = await Promise.all([
+    publicStats(),
+    publishedReviews(),
+    activePlans(),
+    currentUser(),
+  ]);
 
   return (
     <>
