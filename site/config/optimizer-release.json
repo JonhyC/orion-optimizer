@@ -1,13 +1,13 @@
 {
-  "version": "1.0.6",
+  "version": "1.1.0",
   "downloadPath": "/downloads/Orion-Optimizer-Setup.exe",
-  "sha256": "3e0da2369d6f2255c891e3dde093311510897923f77cb78c4b9ea58ce0a1b337",
-  "sizeBytes": 108681551,
-  "releasedAt": 1785629465,
+  "sha256": "014a219010daf407dd7736f2fa566d60061d16130cea00645aefeabef6a99cc0",
+  "sizeBytes": 108693928,
+  "releasedAt": 1785631550,
   "notes": [
-    "Tema claro com os contornos e sombras na cor da marca",
-    "Modais deixam de aparecer escuros quando o tema claro esta activo",
-    "Corrigido texto invisivel ao passar o rato sobre botoes secundarios",
-    "Barra de titulo acompanha o tema escolhido"
+    "Nova area de Jogos com deteccao de Steam, Epic, GOG e Microsoft Store",
+    "Nova area de Desempenho com CPU, memoria, GPU, disco, rede e ecra",
+    "Interface do Optimizer renovada com animacoes, sparklines e cards mais claros",
+    "Versao 1.1.0 preparada para instalacao e atualizacao pelo site"
   ]
 }

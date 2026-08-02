@@ -110,6 +110,61 @@ type InternalOverview = {
   versions: Array<{ version: string; count: number }>;
 };
 
+type OrionGame = {
+  id: string;
+  name: string;
+  platform: string;
+  installPath: string | null;
+  sizeBytes: number;
+  launchUri: string | null;
+};
+
+type OrionGamesResult = {
+  items: OrionGame[];
+  warnings: string[];
+};
+
+type OrionPerformance = {
+  timestamp: number;
+  cpu: {
+    name: string;
+    cores: number;
+    threads: number;
+    baseClockMhz: number;
+    currentMhz: number;
+    percent: number | null;
+  };
+  memory: {
+    installedBytes: number;
+    totalBytes: number;
+    usedBytes: number;
+    freeBytes: number;
+    percent: number;
+    hardwareReservedBytes: number;
+  } | null;
+  gpu: {
+    adapters: Array<{ name: string; driverVersion: string | null; memoryBytes: number | null }>;
+    percent: number | null;
+  };
+  disk: {
+    volumes: Array<{ drive: string; label: string | null; totalBytes: number; freeBytes: number; usedBytes: number; percent: number }>;
+    activityPercent: number | null;
+  };
+  network: {
+    sentBytesPerSec: number | null;
+    receivedBytesPerSec: number | null;
+  };
+};
+
+type OrionDisplay = {
+  deviceName: string;
+  displayName: string;
+  primary: boolean;
+  attached: boolean;
+  current: { width: number; height: number; refreshRate: number; bitsPerPel: number };
+  modes: Array<{ width: number; height: number; refreshRate: number; bitsPerPel: number }>;
+};
+
 type OrionApi = {
   appVersion(): Promise<string>;
   getSettings(): Promise<{ server: string; username: string }>;
@@ -131,6 +186,9 @@ type OrionApi = {
   apply(tweak: Tweak): Promise<{ sessionId: string; changes: ChangePreview[] }>;
   sessions(): Promise<OrionSession[]>;
   rollback(session: OrionSession): Promise<unknown[]>;
+  games(): Promise<OrionGamesResult>;
+  performance(): Promise<OrionPerformance>;
+  displays(): Promise<{ items: OrionDisplay[] }>;
   internalOverview(): Promise<InternalOverview>;
   openPortal(pathname: string): Promise<boolean>;
   minimize(): void;

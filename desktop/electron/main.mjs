@@ -366,6 +366,20 @@ function registerIpc() {
     await recordActivity("optimizer_rolled_back", session?.sessionId);
     return result;
   });
+  ipcMain.handle("games:list", async () => {
+    if (!apiToken) throw new Error("Inicia sessao primeiro.");
+    const result = await invokeBridge("games");
+    await recordActivity("optimizer_games_scanned", "desktop");
+    return result;
+  });
+  ipcMain.handle("performance:snapshot", async () => {
+    if (!apiToken) throw new Error("Inicia sessao primeiro.");
+    return invokeBridge("performance");
+  });
+  ipcMain.handle("display:list", async () => {
+    if (!apiToken) throw new Error("Inicia sessao primeiro.");
+    return invokeBridge("displays");
+  });
   ipcMain.handle("internal:overview", async () => {
     if (!account || !["staff", "developer", "owner"].includes(account.role)) {
       throw new Error("Esta area esta disponivel apenas para a equipa Orion.");

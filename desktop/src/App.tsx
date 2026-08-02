@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Gauge,
   Gamepad2,
+  HardDrive,
   History,
   Laptop,
   LockKeyhole,
@@ -42,7 +43,7 @@ import {
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import logo from "./assets/orion.svg";
 
-type View = "catalog" | "history" | "settings" | "internal";
+type View = "catalog" | "games" | "performance" | "history" | "settings" | "internal";
 type Theme = "dark" | "light";
 type Density = "comfortable" | "compact";
 type LoginSettings = { server: string; username: string };
@@ -129,6 +130,18 @@ function relativeTime(timestamp: number | null): string {
 
 function money(cents: number): string {
   return new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(cents / 100);
+}
+
+function formatBytes(bytes: number | null | undefined): string {
+  const value = Number(bytes ?? 0);
+  if (!value) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  return `${(value / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function formatMetric(value: number | null | undefined, suffix = "%"): string {
+  return value === null || value === undefined ? "N/D" : `${Math.round(value * 10) / 10}${suffix}`;
 }
 
 export default function App() {
@@ -219,6 +232,8 @@ export default function App() {
                     notify={setToast}
                   />
                 )}
+                {view === "games" && <GamesView key="games" state={catalog} notify={setToast} />}
+                {view === "performance" && <PerformanceView key="performance" profile={profile} notify={setToast} />}
                 {view === "history" && <HistoryView key="history" notify={setToast} />}
                 {view === "settings" && <SettingsView key="settings" account={catalog.account} profile={profile} settings={settings} appVersion={appVersion} theme={theme} setTheme={setTheme} animations={animations} setAnimations={setAnimations} density={density} setDensity={setDensity} />}
                 {view === "internal" && (
@@ -385,6 +400,8 @@ function Sidebar({ view, setView, account, onLogout }: { view: View; setView: (v
       <div className="sidebar-logo"><img src={logo} alt="" /><div><b>ORION</b><span>OPTIMIZER</span></div></div>
       <span className="sidebar-nav-label">PRINCIPAL</span>
       <nav>
+        <NavButton active={view === "games"} icon={<Gamepad2 />} label="Jogos" onClick={() => setView("games")} />
+        <NavButton active={view === "performance"} icon={<Activity />} label="Desempenho" onClick={() => setView("performance")} />
         <NavButton active={view === "catalog"} icon={<Gauge />} label="Otimizações" onClick={() => setView("catalog")} />
         <NavButton active={view === "history"} icon={<History />} label="Histórico" onClick={() => setView("history")} />
         <NavButton active={view === "settings"} icon={<Settings2 />} label="Definições" onClick={() => setView("settings")} />
@@ -585,6 +602,193 @@ function HistoryView({ notify }: { notify: (toast: { tone: "good" | "bad"; messa
       })}</div>}
     </PageMotion>
   );
+}
+
+function GamesView({ state, notify }: { state: CatalogState; notify: (toast: { tone: "good" | "bad"; message: string }) => void }) {
+  const [games, setGames] = useState<OrionGame[] | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [selected, setSelected] = useState<OrionGame | null>(null);
+  const gameTweaks = state.tweaks.filter((tweak) => ["game", "gpu", "net", "mmcss", "power"].includes(categoryOf(tweak)));
+
+  async function loadGames() {
+    try {
+      const result = await window.orion.games();
+      const rawItems = (result.items as unknown as { value?: OrionGame[] })?.value ?? result.items;
+      const rawWarnings = (result.warnings as unknown as { value?: string[] })?.value ?? result.warnings;
+      setGames(Array.isArray(rawItems) ? rawItems : rawItems ? [rawItems] : []);
+      setWarnings(Array.isArray(rawWarnings) ? rawWarnings : rawWarnings ? [String(rawWarnings)] : []);
+    } catch (error) {
+      notify({ tone: "bad", message: cleanError(error) });
+      setGames([]);
+    }
+  }
+
+  useEffect(() => { void loadGames(); }, []);
+
+  const totalSize = (games ?? []).reduce((sum, game) => sum + Number(game.sizeBytes || 0), 0);
+  const platforms = Array.from(new Set((games ?? []).map((game) => game.platform)));
+
+  return (
+    <PageMotion>
+      <header className="page-header">
+        <div><span className="eyebrow">BIBLIOTECA</span><h1>Jogos</h1><p>Jogos detetados no PC e perfis de otimizacao recomendados.</p></div>
+        <div className="header-actions">
+          <div className="mode-badge"><Gamepad2 size={14} />{games ? `${games.length} jogos` : "A procurar"}</div>
+          <button className="icon-button" onClick={() => void loadGames()} title="Atualizar jogos"><RefreshCcw size={16} className={games === null ? "spin" : ""} /></button>
+        </div>
+      </header>
+
+      <section className="gaming-hero">
+        <motion.div className="gaming-orbit" animate={{ rotate: 360 }} transition={{ duration: 22, repeat: Infinity, ease: "linear" }} />
+        <div><span className="eyebrow">PERFIL GAMING</span><h2>{gameTweaks.length} otimizacoes prontas</h2><p>Escolhe um jogo para ver o perfil manual recomendado. Nada e aplicado sem confirmares.</p></div>
+        <div className="gaming-stats"><SummaryItem icon={<HardDrive />} label="Tamanho" value={formatBytes(totalSize)} /><SummaryItem icon={<PackageCheck />} label="Lojas" value={platforms.length ? platforms.join(" + ") : "A detetar"} /></div>
+      </section>
+
+      {warnings.length > 0 && <div className="operations-error"><CircleAlert size={15} />Algumas lojas responderam com avisos. A lista restante continua valida.</div>}
+
+      {games === null ? (
+        <div className="page-loading"><Spinner />A procurar jogos instalados</div>
+      ) : games.length === 0 ? (
+        <EmptyState icon={<Gamepad2 />} title="Sem jogos detetados" text="Instala Steam, Epic, GOG ou jogos da Store para aparecerem aqui." />
+      ) : (
+        <div className="games-grid">
+          {games.map((game, index) => (
+            <motion.button className="game-card" key={game.id} onClick={() => setSelected(game)} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * 0.035, 0.25) }}>
+              <span className="game-platform">{game.platform}</span>
+              <strong>{game.name}</strong>
+              <small>{game.installPath || "Localizacao protegida pelo Windows"}</small>
+              <div><span>{formatBytes(game.sizeBytes)}</span><ChevronRight size={15} /></div>
+            </motion.button>
+          ))}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {selected && <GameModal game={selected} tweaks={gameTweaks} eligibility={state.eligibility} onClose={() => setSelected(null)} />}
+      </AnimatePresence>
+    </PageMotion>
+  );
+}
+
+function GameModal({ game, tweaks, eligibility, onClose }: { game: OrionGame; tweaks: Tweak[]; eligibility: CatalogState["eligibility"]; onClose: () => void }) {
+  const recommended = tweaks.slice(0, 6);
+  return (
+    <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <motion.section className="modal game-modal" initial={{ opacity: 0, y: 18, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: .98 }}>
+        <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
+        <div className="modal-heading"><span className="eyebrow">{game.platform}</span><h2>{game.name}</h2><p>{game.installPath || "Jogo protegido pela loja. O Orion usa otimizacoes seguras fora da pasta do jogo."}</p></div>
+        <div className="game-modal-grid">
+          <ModalStat label="Tamanho" value={formatBytes(game.sizeBytes)} />
+          <ModalStat label="Perfil" value="Gaming manual" />
+          <ModalStat label="Acoes" value={String(recommended.length)} />
+        </div>
+        <div className="game-recommendations">
+          {recommended.map((tweak) => (
+            <div key={tweak.id} className="game-recommendation">
+              <span className="tweak-icon">{(() => { const Icon = CATEGORY[categoryOf(tweak)]?.icon ?? Zap; return <Icon size={15} />; })()}</span>
+              <span><strong>{tweak.name}</strong><small>{eligibility[tweak.id]?.eligible === false ? eligibility[tweak.id].reason : tweak.description}</small></span>
+              <b className={eligibility[tweak.id]?.eligible === false ? "blocked" : ""}>{eligibility[tweak.id]?.eligible === false ? "Bloqueada" : "Pronta"}</b>
+            </div>
+          ))}
+        </div>
+        <div className="modal-actions"><button className="primary" onClick={onClose}>Entendido</button></div>
+      </motion.section>
+    </motion.div>
+  );
+}
+
+function PerformanceView({ profile, notify }: { profile: SystemProfile | null; notify: (toast: { tone: "good" | "bad"; message: string }) => void }) {
+  const [snapshot, setSnapshot] = useState<OrionPerformance | null>(null);
+  const [history, setHistory] = useState<OrionPerformance[]>([]);
+  const [displays, setDisplays] = useState<OrionDisplay[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function loadPerformance(silent = false) {
+    if (!silent) setLoading(true);
+    try {
+      const next = await window.orion.performance();
+      setSnapshot(next);
+      setHistory((current) => [...current.slice(-23), next]);
+    } catch (error) {
+      notify({ tone: "bad", message: cleanError(error) });
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadPerformance();
+    window.orion.displays().then((result) => {
+      const raw = (result.items as unknown as { value?: OrionDisplay[] })?.value ?? result.items;
+      setDisplays(Array.isArray(raw) ? raw : raw ? [raw] : []);
+    }).catch(() => setDisplays([]));
+    const timer = setInterval(() => void loadPerformance(true), 3500);
+    return () => clearInterval(timer);
+  }, []);
+
+  const gpuNames = snapshot?.gpu.adapters.map((adapter) => adapter.name).filter(Boolean).join(" + ") || profile?.gpuNames?.join(" + ") || "A detetar";
+  const networkDown = snapshot?.network.receivedBytesPerSec ? `${formatBytes(snapshot.network.receivedBytesPerSec)}/s` : "N/D";
+  const networkUp = snapshot?.network.sentBytesPerSec ? `${formatBytes(snapshot.network.sentBytesPerSec)}/s` : "N/D";
+
+  return (
+    <PageMotion>
+      <header className="page-header">
+        <div><span className="eyebrow">TELEMETRIA</span><h1>Desempenho</h1><p>Leitura visual do PC em tempo real, sem alterar configuracoes.</p></div>
+        <div className="header-actions">
+          <div className="mode-badge"><Activity size={14} />{snapshot ? new Date(snapshot.timestamp * 1000).toLocaleTimeString("pt-PT") : "A ler"}</div>
+          <button className="icon-button" onClick={() => void loadPerformance()} disabled={loading} title="Atualizar desempenho"><RefreshCcw size={16} className={loading ? "spin" : ""} /></button>
+        </div>
+      </header>
+
+      {snapshot === null ? (
+        <div className="page-loading"><Spinner />A ler desempenho do sistema</div>
+      ) : (
+        <>
+          <section className="performance-grid">
+            <PerformanceCard icon={<Cpu />} label="CPU" value={formatMetric(snapshot.cpu.percent)} detail={`${snapshot.cpu.cores}C/${snapshot.cpu.threads}T · ${snapshot.cpu.currentMhz || snapshot.cpu.baseClockMhz} MHz`} samples={history.map((item) => item.cpu.percent ?? 0)} />
+            <PerformanceCard icon={<MemoryStick />} label="Memoria" value={formatMetric(snapshot.memory?.percent)} detail={`${formatBytes(snapshot.memory?.usedBytes)} usados de ${formatBytes(snapshot.memory?.totalBytes)}`} samples={history.map((item) => item.memory?.percent ?? 0)} />
+            <PerformanceCard icon={<MonitorCog />} label="GPU" value={formatMetric(snapshot.gpu.percent)} detail={gpuNames} samples={history.map((item) => item.gpu.percent ?? 0)} />
+            <PerformanceCard icon={<HardDrive />} label="Disco" value={formatMetric(snapshot.disk.activityPercent)} detail={`${snapshot.disk.volumes.length} volumes detetados`} samples={history.map((item) => item.disk.activityPercent ?? 0)} />
+          </section>
+
+          <section className="performance-details">
+            <div className="perf-panel">
+              <div className="settings-panel-heading"><span className="settings-panel-icon"><Network size={17} /></span><div><h2>Rede</h2><p>Trabalho atual das interfaces fisicas</p></div></div>
+              <div className="perf-lines"><InfoLine label="Download" value={networkDown} /><InfoLine label="Upload" value={networkUp} /></div>
+            </div>
+            <div className="perf-panel">
+              <div className="settings-panel-heading"><span className="settings-panel-icon"><HardDrive size={17} /></span><div><h2>Armazenamento</h2><p>Volumes com espaco e utilizacao</p></div></div>
+              <div className="drive-list">{snapshot.disk.volumes.map((drive) => <div key={drive.drive}><span><strong>{drive.drive}</strong><small>{drive.label || "Sem nome"} · {formatBytes(drive.freeBytes)} livres</small></span><b>{formatMetric(drive.percent)}</b></div>)}</div>
+            </div>
+            <div className="perf-panel displays-panel">
+              <div className="settings-panel-heading"><span className="settings-panel-icon"><MonitorCog size={17} /></span><div><h2>Ecras</h2><p>Detecao segura, sem aplicar modos automaticamente</p></div></div>
+              <div className="drive-list">{displays.length ? displays.map((display) => <div key={display.deviceName}><span><strong>{display.displayName || display.deviceName}</strong><small>{display.current.width}x{display.current.height} @ {display.current.refreshRate} Hz · {display.modes.length} modos</small></span><b>{display.primary ? "Principal" : "Extra"}</b></div>) : <div><span><strong>Sem dados</strong><small>O Windows nao devolveu monitores nesta leitura.</small></span><b>N/D</b></div>}</div>
+            </div>
+          </section>
+        </>
+      )}
+    </PageMotion>
+  );
+}
+
+function PerformanceCard({ icon, label, value, detail, samples }: { icon: ReactNode; label: string; value: string; detail: string; samples: number[] }) {
+  return (
+    <motion.article className="performance-card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="performance-card-top"><span>{icon}</span><div><small>{label}</small><strong>{value}</strong></div></div>
+      <Sparkline samples={samples} />
+      <p>{detail}</p>
+    </motion.article>
+  );
+}
+
+function Sparkline({ samples }: { samples: number[] }) {
+  const points = samples.length ? samples : [0];
+  const pathData = points.map((value, index) => {
+    const x = points.length === 1 ? 100 : (index / (points.length - 1)) * 100;
+    const y = 42 - Math.max(0, Math.min(100, value)) * 0.38;
+    return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+  }).join(" ");
+  return <svg className="sparkline" viewBox="0 0 100 44" preserveAspectRatio="none"><path d={pathData} /></svg>;
 }
 
 type InternalTool = {
