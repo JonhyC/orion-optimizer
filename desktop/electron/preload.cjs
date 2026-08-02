@@ -11,7 +11,6 @@ contextBridge.exposeInMainWorld("orion", {
   profile: () => ipcRenderer.invoke("system:profile"),
   preview: (tweak) => ipcRenderer.invoke("tweak:preview", tweak),
   apply: (tweak) => ipcRenderer.invoke("tweak:apply", tweak),
-  applyBatch: (ids, gameId) => ipcRenderer.invoke("tweaks:apply-batch", ids, gameId),
   sessions: () => ipcRenderer.invoke("history:list"),
   rollback: (session) => ipcRenderer.invoke("history:rollback", session),
   games: () => ipcRenderer.invoke("games:list"),

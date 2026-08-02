@@ -412,18 +412,8 @@ button.presence-row:hover { background: rgba(155,99,234,.035); }
 .game-recommendation small { overflow: hidden; color: var(--text-3); font-size: 9px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .game-recommendation b { color: var(--green); font-size: 8.5px; text-transform: uppercase; }
 .game-recommendation b.blocked { color: var(--amber); }
-.game-total-action { margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px; border: 1px solid rgba(155,99,234,.26); border-radius: 7px; background: rgba(155,99,234,.06); }
-.game-total-action > div { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-.game-total-action strong { color: var(--title); font-size: 11px; }
-.game-total-action span { color: var(--text-3); font-size: 9px; line-height: 1.35; }
-.game-total-action .primary { flex: 0 0 auto; min-height: 32px; padding-inline: 10px; font-size: 9.5px; }
 .game-tweak-action { min-height: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border: 1px solid rgba(155,99,234,.3); border-radius: 5px; background: rgba(155,99,234,.08); color: var(--violet-strong); font-size: 8.5px; font-weight: 700; cursor: pointer; }
 .game-tweak-action:hover { border-color: var(--violet); background: rgba(155,99,234,.18); }
-.game-total-list { margin-top: 16px; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
-.game-total-list > div { min-height: 50px; display: grid; grid-template-columns: 32px minmax(0, 1fr) 18px; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
-.game-total-list > div:last-child { border-bottom: 0; }
-.game-total-list strong { overflow: hidden; color: var(--title); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
-.game-total-list > div > svg { color: var(--green); }
 
 .performance-grid { margin-top: 25px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .performance-card { min-width: 0; min-height: 188px; display: flex; flex-direction: column; padding: 17px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 12px 34px var(--shadow); overflow: hidden; }

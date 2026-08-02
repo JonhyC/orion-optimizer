@@ -362,26 +362,6 @@ async function authorizedTweak(id, revalidate = false) {
   return tweak;
 }
 
-async function authorizedTweaks(ids) {
-  if (!apiToken) throw new Error("A sessao terminou. Inicia sessao novamente.");
-  const uniqueIds = [...new Set(Array.isArray(ids) ? ids.map((id) => String(id)) : [])].filter(Boolean);
-  if (!uniqueIds.length) throw new Error("Nao ha otimizacoes para aplicar.");
-  if (uniqueIds.length > 12) throw new Error("O lote de otimizacoes e demasiado grande.");
-
-  const data = await api("/api/catalog");
-  catalogCache = Array.isArray(data.catalog?.tweaks) ? data.catalog.tweaks : [];
-  const tweaks = uniqueIds.map((id) => catalogCache.find((item) => item.id === id));
-  if (tweaks.some((tweak) => !tweak)) throw new Error("Uma otimizacao ja nao pertence ao catalogo autorizado.");
-
-  cachedProfile ??= await invokeBridge("profile");
-  const eligibility = await invokeBridge("eligibility", { tweaks, profile: cachedProfile });
-  for (const tweak of tweaks) {
-    const check = eligibility[tweak.id];
-    if (!check?.eligible) throw new Error(check?.reason || "Otimizacao incompativel com este PC.");
-  }
-  return tweaks;
-}
-
 function registerIpc() {
   ipcMain.handle("app:version", () => app.getVersion());
   ipcMain.handle("app:elevate", relaunchElevated);
@@ -440,16 +420,6 @@ function registerIpc() {
     const trusted = await authorizedTweak(tweak?.id, true);
     const result = await invokeBridge("apply", { tweak: trusted }, Number(trusted.layer) >= 1);
     await recordActivity("optimizer_applied", trusted.id);
-    return result;
-  });
-  ipcMain.handle("tweaks:apply-batch", async (_event, ids, gameId) => {
-    const trusted = await authorizedTweaks(ids);
-    const result = await invokeBridge(
-      "apply-batch",
-      { tweaks: trusted, note: `gaming:${String(gameId ?? "profile").slice(0, 80)}` },
-      trusted.some((tweak) => Number(tweak.layer) >= 1),
-    );
-    await recordActivity("optimizer_applied", `gaming:${String(gameId ?? "profile").slice(0, 80)}`);
     return result;
   });
   ipcMain.handle("history:list", async () => {

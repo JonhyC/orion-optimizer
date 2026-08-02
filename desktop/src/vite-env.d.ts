@@ -185,7 +185,6 @@ type OrionApi = {
   profile(): Promise<SystemProfile>;
   preview(tweak: Tweak): Promise<ChangePreview[]>;
   apply(tweak: Tweak): Promise<{ sessionId: string; changes: ChangePreview[] }>;
-  applyBatch(ids: string[], gameId?: string): Promise<{ sessionId: string; applied: Array<{ id: string }> }>;
   sessions(): Promise<OrionSession[]>;
   rollback(session: OrionSession): Promise<unknown[]>;
   games(): Promise<OrionGamesResult>;
