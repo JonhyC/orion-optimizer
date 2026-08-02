@@ -1,7 +1,8 @@
 {
+  "//": "Indices compostos. O Firestore cria sozinho os de campo unico; estes tem de ser declarados. Sem eles a query falha em runtime com um link para os criar - melhor declarar aqui e enviar de uma vez com 'firebase deploy --only firestore:indexes'.",
   "indexes": [
     {
-      "comment": "Encomendas de um cliente, mais recentes primeiro. O Firestore exige indice composto sempre que se filtra por um campo e ordena por outro.",
+      "comment": "Encomendas de um cliente, mais recentes primeiro.",
       "collectionGroup": "orders",
       "queryScope": "COLLECTION",
       "fields": [
@@ -35,7 +36,62 @@
         { "fieldPath": "active", "order": "ASCENDING" },
         { "fieldPath": "sort_order", "order": "ASCENDING" }
       ]
+    },
+    {
+      "comment": "Revogar so os tokens do cliente Windows sem tocar na sessao do site (revokeClientTokens).",
+      "collectionGroup": "tokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "kind", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "comment": "Presenca online: quem tem token vivo visto recentemente. Substitui o idx_tokens_presence do SQLite.",
+      "collectionGroup": "tokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "kind", "order": "ASCENDING" },
+        { "fieldPath": "expires_at", "order": "ASCENDING" },
+        { "fieldPath": "last_seen_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "comment": "Limite de tentativas de login: falhas do mesmo utilizador e IP dentro da janela de bloqueio (isLockedOut).",
+      "collectionGroup": "login_attempts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "username", "order": "ASCENDING" },
+        { "fieldPath": "ip", "order": "ASCENDING" },
+        { "fieldPath": "success", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "comment": "Actividade recente de um utilizador no painel.",
+      "collectionGroup": "audit_log",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "comment": "Auditoria agregada por accao num periodo (estatisticas do painel).",
+      "collectionGroup": "audit_log",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "action", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "//": "TTL: o Firestore apaga sozinho os tokens expirados, do lado do servidor e sem custo de escrita. Substitui o DELETE que o issueToken fazia a cada login - no Firestore isso seria uma query mais N deletes por cada inicio de sessao. A politica TTL em si NAO se activa por este ficheiro: tem de ser ligada na consola ou por gcloud (ver DEPLOY.md).",
+      "collectionGroup": "tokens",
+      "fieldPath": "expires_at",
+      "indexes": []
+    }
+  ]
 }
