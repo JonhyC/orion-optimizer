@@ -1,5 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+// A comparacao de versoes vive em lib/version.ts, sem imports de Node, para
+// o painel a poder usar do lado do cliente sem arrastar o node:fs daqui.
+import { SEMVER, compareVersions } from "./version.ts";
+
+export { compareVersions } from "./version.ts";
 
 /**
  * Manifesto da aplicacao Orion.
@@ -32,8 +37,6 @@ export type OptimizerRelease = {
 };
 
 const RELEASE_PATH = path.join(process.cwd(), "config", "optimizer-release.json");
-
-const SEMVER = /^\d+\.\d+\.\d+$/;
 
 export function optimizerRelease(): OptimizerRelease {
   const value: unknown = JSON.parse(fs.readFileSync(RELEASE_PATH, "utf8"));
@@ -81,17 +84,6 @@ function isSafeDownloadUrl(value: string): boolean {
   } catch {
     return false;
   }
-}
-
-/** Negativo se `left` for anterior, zero se igual, positivo se posterior. */
-export function compareVersions(left: string, right: string): number {
-  const a = left.split(".").map(Number);
-  const b = right.split(".").map(Number);
-  for (let i = 0; i < 3; i += 1) {
-    const d = (a[i] || 0) - (b[i] || 0);
-    if (d !== 0) return d;
-  }
-  return 0;
 }
 
 export type UpdateStatus = {

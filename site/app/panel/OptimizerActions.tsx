@@ -1,9 +1,38 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, ExternalLink, RefreshCw } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  Download,
+  ExternalLink,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
 import type { OptimizerRelease } from "@/lib/optimizer-release";
+import { compareVersions, formatBytes, timeAgo, updateState } from "@/lib/version";
+
+/**
+ * Cartao de actualizacao do Optimizer.
+ *
+ * O painel e uma pagina web e a aplicacao e um processo separado: o botao
+ * abre `orion-optimizer://update`, o Electron trata do resto e o painel
+ * nao ve o progresso do download. Nao da para inventar uma percentagem
+ * que nao se conhece, por isso o que se mostra e uma barra indeterminada
+ * e o tempo decorrido - honesto sobre o que se sabe.
+ *
+ * Como o painel nao recebe eventos, deteta o fim pelo unico sinal que tem:
+ * a versao instalada, que o servidor volta a enviar a cada refresh. Quando
+ * essa versao alcanca a publicada, a actualizacao terminou.
+ */
+
+/** Ao fim disto propoe-se o instalador manual: algo correu mal em silencio. */
+const SEGUNDOS_ATE_ALTERNATIVA = 45;
+
+type Fase = "parado" | "a-atualizar" | "concluida";
 
 export default function OptimizerActions({
   installedVersion,
@@ -13,76 +42,338 @@ export default function OptimizerActions({
   release: OptimizerRelease;
 }) {
   const router = useRouter();
+  const reduzirMovimento = useReducedMotion();
   const [origin, setOrigin] = useState("");
-  const [updateStarted, setUpdateStarted] = useState(false);
-  const outdated = !installedVersion || compareVersions(installedVersion, release.version) < 0;
-  const supportsAutoUpdate = Boolean(
-    installedVersion && compareVersions(installedVersion, "1.0.0") >= 0,
-  );
+  const [fase, setFase] = useState<Fase>("parado");
+  const [segundos, setSegundos] = useState(0);
+  const versaoAoIniciar = useRef<string | null>(null);
+
+  const estado = updateState(release, installedVersion);
+  const desactualizado = estado === "disponivel" || estado === "obrigatoria" || estado === "desconhecida";
+  const obrigatoria = estado === "obrigatoria";
+
+  // A actualizacao automatica so existe a partir da 1.0.0. Abaixo disso a
+  // unica via e reinstalar por cima.
+  const suportaAuto = Boolean(installedVersion && compareVersions(installedVersion, "1.0.0") >= 0);
 
   useEffect(() => setOrigin(window.location.origin), []);
-  useEffect(() => {
-    if (!updateStarted || !outdated) return;
-    const refresh = window.setInterval(() => router.refresh(), 4000);
-    const onFocus = () => router.refresh();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.clearInterval(refresh);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [outdated, router, updateStarted]);
 
-  const updateHref = useMemo(() => {
+  // Enquanto atualiza: refrescar para o servidor dizer a versao instalada,
+  // e contar o tempo para poder oferecer alternativa se encravar.
+  useEffect(() => {
+    if (fase !== "a-atualizar") return;
+    const t = window.setInterval(() => {
+      setSegundos((s) => s + 1);
+      router.refresh();
+    }, 1000);
+    const aoFocar = () => router.refresh();
+    window.addEventListener("focus", aoFocar);
+    return () => {
+      window.clearInterval(t);
+      window.removeEventListener("focus", aoFocar);
+    };
+  }, [fase, router]);
+
+  // A versao instalada subiu depois de termos comecado: acabou.
+  useEffect(() => {
+    if (fase !== "a-atualizar" || !installedVersion) return;
+    const antes = versaoAoIniciar.current;
+    if (antes && compareVersions(installedVersion, antes) > 0) {
+      setFase("concluida");
+      const t = window.setTimeout(() => setFase("parado"), 6000);
+      return () => window.clearTimeout(t);
+    }
+  }, [fase, installedVersion]);
+
+  const hrefAtualizar = useMemo(() => {
     if (!origin) return release.downloadPath;
-    const downloadUrl = new URL(release.downloadPath, origin).toString();
-    const params = new URLSearchParams({
-      version: release.version,
-      url: downloadUrl,
-      sha256: release.sha256,
-    });
-    return `orion-optimizer://update?${params.toString()}`;
+    const url = new URL(release.downloadPath, origin).toString();
+    const p = new URLSearchParams({ version: release.version, url, sha256: release.sha256 });
+    return `orion-optimizer://update?${p.toString()}`;
   }, [origin, release]);
 
-  return (
-    <div className="flex flex-wrap items-center gap-2.5">
-      <a
-        href={outdated ? (supportsAutoUpdate ? updateHref : release.downloadPath) : "orion-optimizer://open"}
-        download={outdated && !supportsAutoUpdate ? true : undefined}
-        onClick={() => outdated && supportsAutoUpdate && setUpdateStarted(true)}
-        className="inline-flex items-center gap-2 rounded-lg bg-[var(--chart-1)] px-4 py-2.5 text-[13px] font-semibold text-[#16082c] transition-opacity hover:opacity-90"
-      >
-        {outdated ? (
-          <RefreshCw size={15} className={updateStarted ? "animate-spin" : ""} />
-        ) : (
-          <ExternalLink size={15} />
-        )}
-        {outdated ? (updateStarted ? "A atualizar..." : "Atualizar Optimizer") : "Abrir Optimizer"}
-      </a>
-      {(supportsAutoUpdate || !outdated) && (
+  const tamanho = formatBytes(release.sizeBytes);
+  const quando = timeAgo(release.releasedAt);
+  const anim = reduzirMovimento ? {} : undefined;
+
+  // --- Actualizada: nao roubar espaco a quem nao tem nada a fazer -------
+  if (!desactualizado && fase === "parado") {
+    return (
+      <div className="flex flex-wrap items-center gap-2.5">
         <a
-          href={release.downloadPath}
-          download
-          className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[var(--panel-surface-2)] px-4 py-2.5 text-[13px] font-semibold text-white/70 transition-colors hover:border-[var(--chart-1)]/50 hover:text-white"
+          href="orion-optimizer://open"
+          className="inline-flex items-center gap-2 rounded-lg bg-[var(--chart-1)] px-4 py-2.5 text-[13px] font-semibold text-[#16082c] transition-opacity hover:opacity-90"
         >
-          <Download size={15} />
-          {outdated ? "Descarregar instalador" : "Descarregar"}
+          <ExternalLink size={15} />
+          Abrir Optimizer
         </a>
-      )}
-      <span className="w-full text-[10.5px] text-white/25">
-        {installedVersion ? `Instalada ${installedVersion}` : "Versao instalada ainda nao identificada"}
-        {outdated ? ` · disponivel ${release.version}` : " · atualizada"}
-        {outdated && !supportsAutoUpdate ? " · primeira atualizacao por instalador" : ""}
-      </span>
+        <span className="inline-flex items-center gap-1.5 text-[11.5px] text-[var(--good)]">
+          <Check size={13} />
+          Versão {installedVersion} · atualizada
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={reduzirMovimento ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      className={`w-full max-w-md overflow-hidden rounded-2xl border bg-[var(--panel-surface)] ${
+        obrigatoria
+          ? "border-[var(--warning)]/40"
+          : "border-[var(--chart-1)]/25"
+      }`}
+    >
+      {/* Faixa superior: da cor ao cartao sem pintar o fundo todo. */}
+      <div
+        className={`h-[3px] w-full ${
+          obrigatoria
+            ? "bg-gradient-to-r from-[var(--warning)] to-[var(--warning)]/30"
+            : "bg-gradient-to-r from-[var(--chart-1)] to-[var(--chart-1)]/20"
+        }`}
+      />
+
+      <div className="p-5">
+        <AnimatePresence mode="wait" initial={false}>
+          {fase === "concluida" ? (
+            <Concluida key="ok" versao={installedVersion ?? release.version} reduzir={!!reduzirMovimento} />
+          ) : fase === "a-atualizar" ? (
+            <AAtualizar
+              key="a-atualizar"
+              segundos={segundos}
+              alternativa={release.downloadPath}
+              reduzir={!!reduzirMovimento}
+            />
+          ) : (
+            <motion.div key="disponivel" exit={anim ?? { opacity: 0 }}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
+                      obrigatoria
+                        ? "bg-[var(--warning)]/12 text-[var(--warning)]"
+                        : "bg-[var(--chart-1)]/12 text-[var(--chart-1)]"
+                    }`}
+                  >
+                    {obrigatoria ? <AlertTriangle size={17} /> : <Sparkles size={17} />}
+                  </span>
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-white">
+                      {obrigatoria ? "Atualização necessária" : "Nova versão disponível"}
+                    </h3>
+                    <VersaoParaVersao
+                      de={installedVersion}
+                      para={release.version}
+                      reduzir={!!reduzirMovimento}
+                    />
+                  </div>
+                </div>
+                {obrigatoria && (
+                  <motion.span
+                    animate={reduzirMovimento ? {} : { opacity: [1, 0.55, 1] }}
+                    transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                    className="shrink-0 rounded-full bg-[var(--warning)]/12 px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--warning)]"
+                  >
+                    Obrigatória
+                  </motion.span>
+                )}
+              </div>
+
+              {obrigatoria && (
+                <p className="mt-3 text-[12px] leading-relaxed text-[var(--warning)]/90">
+                  A versão instalada tem um problema conhecido e deixou de ser
+                  suportada. Atualiza antes de voltares a otimizar.
+                </p>
+              )}
+
+              {release.notes && release.notes.length > 0 && (
+                <ul className="mt-4 space-y-1.5">
+                  {release.notes.slice(0, 6).map((nota, i) => (
+                    <motion.li
+                      key={nota}
+                      initial={reduzirMovimento ? false : { opacity: 0, x: -6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.12 + i * 0.055, duration: 0.3 }}
+                      className="flex gap-2 text-[12.5px] leading-relaxed text-white/55"
+                    >
+                      <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-[var(--chart-1)]/70" />
+                      {nota}
+                    </motion.li>
+                  ))}
+                </ul>
+              )}
+
+              {(tamanho || quando) && (
+                <p className="mt-3.5 text-[11px] text-white/25">
+                  {[tamanho, quando].filter(Boolean).join(" · ")}
+                </p>
+              )}
+
+              <div className="mt-4 flex flex-wrap gap-2.5">
+                <a
+                  href={suportaAuto ? hrefAtualizar : release.downloadPath}
+                  download={suportaAuto ? undefined : true}
+                  onClick={() => {
+                    if (!suportaAuto) return;
+                    versaoAoIniciar.current = installedVersion;
+                    setSegundos(0);
+                    setFase("a-atualizar");
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-semibold transition-opacity hover:opacity-90 ${
+                    obrigatoria
+                      ? "bg-[var(--warning)] text-[#2a1c00]"
+                      : "bg-[var(--chart-1)] text-[#16082c]"
+                  }`}
+                >
+                  <RefreshCw size={15} />
+                  {suportaAuto ? "Atualizar agora" : "Descarregar instalador"}
+                </a>
+                {suportaAuto && (
+                  <a
+                    href={release.downloadPath}
+                    download
+                    className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[var(--panel-surface-2)] px-4 py-2.5 text-[13px] font-semibold text-white/70 transition-colors hover:border-[var(--chart-1)]/50 hover:text-white"
+                  >
+                    <Download size={15} />
+                    Instalador
+                  </a>
+                )}
+              </div>
+
+              {!installedVersion && (
+                <p className="mt-3 text-[11px] leading-relaxed text-white/25">
+                  Ainda não sabemos que versão tens instalada — abre o Optimizer
+                  uma vez para o painel a registar.
+                </p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
+/** `1.0.5 → 1.0.6`, com a seta a deslizar para sugerir a passagem. */
+function VersaoParaVersao({
+  de,
+  para,
+  reduzir,
+}: {
+  de: string | null;
+  para: string;
+  reduzir: boolean;
+}) {
+  return (
+    <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[11.5px]">
+      <span className="text-white/30">{de ?? "desconhecida"}</span>
+      <motion.span
+        animate={reduzir ? {} : { x: [0, 3, 0] }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+        className="text-[var(--chart-1)]"
+      >
+        <ArrowRight size={12} />
+      </motion.span>
+      <span className="font-semibold text-white/80">{para}</span>
     </div>
   );
 }
 
-function compareVersions(left: string, right: string): number {
-  const a = left.split(".").map(Number);
-  const b = right.split(".").map(Number);
-  for (let index = 0; index < 3; index += 1) {
-    const difference = (a[index] || 0) - (b[index] || 0);
-    if (difference !== 0) return difference;
-  }
-  return 0;
+function AAtualizar({
+  segundos,
+  alternativa,
+  reduzir,
+}: {
+  segundos: number;
+  alternativa: string;
+  reduzir: boolean;
+}) {
+  const demorado = segundos >= SEGUNDOS_ATE_ALTERNATIVA;
+
+  return (
+    <motion.div
+      initial={reduzir ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <div className="flex items-center gap-2.5">
+        <motion.span
+          animate={reduzir ? {} : { rotate: 360 }}
+          transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--chart-1)]/12 text-[var(--chart-1)]"
+        >
+          <RefreshCw size={17} />
+        </motion.span>
+        <div>
+          <h3 className="text-[14px] font-semibold text-white">A atualizar…</h3>
+          <p className="mt-0.5 text-[11.5px] text-white/35">
+            A aplicação fecha e reabre sozinha quando terminar.
+          </p>
+        </div>
+      </div>
+
+      {/* Barra indeterminada: o painel nao recebe o progresso real do
+          download, e desenhar uma percentagem inventada seria mentir. */}
+      <div className="relative mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+        <motion.div
+          animate={reduzir ? { opacity: 0.6 } : { x: ["-60%", "160%"] }}
+          transition={
+            reduzir
+              ? {}
+              : { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
+          }
+          className="absolute inset-y-0 w-2/5 rounded-full bg-gradient-to-r from-transparent via-[var(--chart-1)] to-transparent"
+        />
+      </div>
+
+      <p className="mt-3 text-[11px] tabular-nums text-white/25">
+        {segundos}s decorridos
+      </p>
+
+      <AnimatePresence>
+        {demorado && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="mt-3 overflow-hidden"
+          >
+            <p className="text-[11.5px] leading-relaxed text-white/45">
+              Está a demorar mais do que o normal. Se não aconteceu nada, a
+              aplicação pode não ter recebido o pedido —{" "}
+              <a href={alternativa} download className="text-[var(--chart-1)] hover:underline">
+                instala manualmente
+              </a>
+              .
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function Concluida({ versao, reduzir }: { versao: string; reduzir: boolean }) {
+  return (
+    <motion.div
+      initial={reduzir ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex items-center gap-2.5"
+    >
+      <motion.span
+        initial={reduzir ? false : { scale: 0.5 }}
+        animate={{ scale: 1 }}
+        transition={{ type: "spring", stiffness: 420, damping: 16 }}
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--good)]/12 text-[var(--good)]"
+      >
+        <Check size={18} />
+      </motion.span>
+      <div>
+        <h3 className="text-[14px] font-semibold text-white">Atualizada</h3>
+        <p className="mt-0.5 font-mono text-[11.5px] text-[var(--good)]">versão {versao}</p>
+      </div>
+    </motion.div>
+  );
 }
