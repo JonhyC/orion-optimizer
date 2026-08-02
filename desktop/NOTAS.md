@@ -6,6 +6,6 @@ alguem carregar em actualizar. Linhas com # sao ignoradas.
 
 Limpar depois de publicar.
 
-- Novo botao nas Definicoes para reabrir o Optimizer em modo administrador
-- A sessao elevada mostra o estado real do Windows e pede confirmacao UAC apenas quando necessario
-- Detecao de jogos Xbox e PC Game Pass em todas as pastas XboxGames dos discos instalados
+- Cada jogo tem agora botao individual para aplicar uma otimizacao com pre-visualizacao
+- Nova Otimizacao total aplica todas as recomendacoes compativeis numa sessao reversivel
+- A otimizacao total pede uma unica confirmacao e um unico pedido de administrador quando necessario

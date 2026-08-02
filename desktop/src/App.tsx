@@ -241,7 +241,7 @@ export default function App() {
                     notify={setToast}
                   />
                 )}
-                {view === "games" && <GamesView key="games" state={catalog} notify={setToast} />}
+                {view === "games" && <GamesView key="games" state={catalog} profile={profile} notify={setToast} />}
                 {view === "performance" && <PerformanceView key="performance" profile={profile} notify={setToast} />}
                 {view === "history" && <HistoryView key="history" notify={setToast} />}
                 {view === "settings" && <SettingsView key="settings" account={catalog.account} profile={profile} settings={settings} appVersion={appVersion} theme={theme} setTheme={setTheme} animations={animations} setAnimations={setAnimations} density={density} setDensity={setDensity} onElevate={elevateApp} />}
@@ -613,10 +613,12 @@ function HistoryView({ notify }: { notify: (toast: { tone: "good" | "bad"; messa
   );
 }
 
-function GamesView({ state, notify }: { state: CatalogState; notify: (toast: { tone: "good" | "bad"; message: string }) => void }) {
+function GamesView({ state, profile, notify }: { state: CatalogState; profile: SystemProfile | null; notify: (toast: { tone: "good" | "bad"; message: string }) => void }) {
   const [games, setGames] = useState<OrionGame[] | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [selected, setSelected] = useState<OrionGame | null>(null);
+  const [selectedTweak, setSelectedTweak] = useState<Tweak | null>(null);
+  const [totalGame, setTotalGame] = useState<OrionGame | null>(null);
   const gameTweaks = state.tweaks.filter((tweak) => ["game", "gpu", "net", "mmcss", "power"].includes(categoryOf(tweak)));
 
   async function loadGames() {
@@ -673,14 +675,17 @@ function GamesView({ state, notify }: { state: CatalogState; notify: (toast: { t
       )}
 
       <AnimatePresence>
-        {selected && <GameModal game={selected} tweaks={gameTweaks} eligibility={state.eligibility} onClose={() => setSelected(null)} />}
+        {selected && <GameModal game={selected} tweaks={gameTweaks} eligibility={state.eligibility} onClose={() => setSelected(null)} onOptimize={setSelectedTweak} onOptimizeTotal={() => setTotalGame(selected)} />}
+        {selectedTweak && <TweakModal tweak={selectedTweak} onClose={() => setSelectedTweak(null)} onApplied={() => notify({ tone: "good", message: `${selectedTweak.name} aplicada com sucesso.` })} notify={notify} mode={profile?.executionMode ?? "Mock"} />}
+        {totalGame && <GameOptimizationModal game={totalGame} tweaks={gameTweaks.filter((tweak) => state.eligibility[tweak.id]?.eligible !== false).slice(0, 6)} onClose={() => setTotalGame(null)} onApplied={(count) => notify({ tone: "good", message: `${count} otimizacoes aplicadas para ${totalGame.name}.` })} notify={notify} />}
       </AnimatePresence>
     </PageMotion>
   );
 }
 
-function GameModal({ game, tweaks, eligibility, onClose }: { game: OrionGame; tweaks: Tweak[]; eligibility: CatalogState["eligibility"]; onClose: () => void }) {
+function GameModal({ game, tweaks, eligibility, onClose, onOptimize, onOptimizeTotal }: { game: OrionGame; tweaks: Tweak[]; eligibility: CatalogState["eligibility"]; onClose: () => void; onOptimize: (tweak: Tweak) => void; onOptimizeTotal: () => void }) {
   const recommended = tweaks.slice(0, 6);
+  const available = recommended.filter((tweak) => eligibility[tweak.id]?.eligible !== false);
   return (
     <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <motion.section className="modal game-modal" initial={{ opacity: 0, y: 18, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: .98 }}>
@@ -688,19 +693,49 @@ function GameModal({ game, tweaks, eligibility, onClose }: { game: OrionGame; tw
         <div className="modal-heading"><span className="eyebrow">{game.platform}</span><h2>{game.name}</h2><p>{game.installPath || "Jogo protegido pela loja. O Orion usa otimizacoes seguras fora da pasta do jogo."}</p></div>
         <div className="game-modal-grid">
           <ModalStat label="Tamanho" value={formatBytes(game.sizeBytes)} />
-          <ModalStat label="Perfil" value="Gaming manual" />
+          <ModalStat label="Perfil" value="Gaming total" />
           <ModalStat label="Acoes" value={String(recommended.length)} />
         </div>
+        <div className="game-total-action"><div><strong>Otimização total</strong><span>Aplica as {available.length} recomendações compatíveis numa única sessão reversível.</span></div><button className="primary" disabled={!available.length} onClick={onOptimizeTotal}><Zap size={15} />Otimizar tudo</button></div>
         <div className="game-recommendations">
           {recommended.map((tweak) => (
             <div key={tweak.id} className="game-recommendation">
               <span className="tweak-icon">{(() => { const Icon = CATEGORY[categoryOf(tweak)]?.icon ?? Zap; return <Icon size={15} />; })()}</span>
               <span><strong>{tweak.name}</strong><small>{eligibility[tweak.id]?.eligible === false ? eligibility[tweak.id].reason : tweak.description}</small></span>
-              <b className={eligibility[tweak.id]?.eligible === false ? "blocked" : ""}>{eligibility[tweak.id]?.eligible === false ? "Bloqueada" : "Pronta"}</b>
+              {eligibility[tweak.id]?.eligible === false ? <b className="blocked">Bloqueada</b> : <button className="game-tweak-action" onClick={() => onOptimize(tweak)}><Play size={13} />Otimizar</button>}
             </div>
           ))}
         </div>
         <div className="modal-actions"><button className="primary" onClick={onClose}>Entendido</button></div>
+      </motion.section>
+    </motion.div>
+  );
+}
+
+function GameOptimizationModal({ game, tweaks, onClose, onApplied, notify }: { game: OrionGame; tweaks: Tweak[]; onClose: () => void; onApplied: (count: number) => void; notify: (toast: { tone: "good" | "bad"; message: string }) => void }) {
+  const [stage, setStage] = useState<"ready" | "applying" | "done">("ready");
+  const [error, setError] = useState("");
+
+  async function applyTotal() {
+    setStage("applying");
+    setError("");
+    try {
+      await window.orion.applyBatch(tweaks.map((tweak) => tweak.id), game.id);
+      setStage("done");
+      onApplied(tweaks.length);
+    } catch (caught) {
+      const message = cleanError(caught);
+      setError(message);
+      setStage("ready");
+      notify({ tone: "bad", message });
+    }
+  }
+
+  return (
+    <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => event.target === event.currentTarget && stage !== "applying" && onClose()}>
+      <motion.section className="modal game-total-modal" initial={{ opacity: 0, y: 18, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: .98 }}>
+        <button className="modal-close" onClick={onClose} disabled={stage === "applying"} aria-label="Fechar"><X size={18} /></button>
+        {stage === "done" ? <div className="success-state"><div className="success-ring"><Check size={30} /></div><span className="eyebrow">CONCLUÍDO</span><h2>Jogo otimizado</h2><p>{game.name}</p><button className="primary" onClick={onClose}>Concluir</button></div> : <><div className="modal-heading"><span className="eyebrow">OTIMIZAÇÃO TOTAL</span><h2>{game.name}</h2><p>As alterações abaixo são aplicadas numa sessão única e podem ser revertidas no Histórico.</p></div><div className="game-total-list">{tweaks.map((tweak) => <div key={tweak.id}><span className="tweak-icon">{(() => { const Icon = CATEGORY[categoryOf(tweak)]?.icon ?? Zap; return <Icon size={15} />; })()}</span><strong>{tweak.name}</strong><Check size={15} /></div>)}</div>{error && <div className="form-error"><CircleAlert size={15} />{error}</div>}<div className="modal-actions"><button className="secondary" onClick={onClose} disabled={stage === "applying"}>Cancelar</button><button className="primary" onClick={() => void applyTotal()} disabled={stage === "applying" || !tweaks.length}>{stage === "applying" ? <><Spinner />A otimizar</> : <><Zap size={15} />Confirmar otimização total</>}</button></div></>}
       </motion.section>
     </motion.div>
   );

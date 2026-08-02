@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('profile','eligibility','preview','apply','sessions','rollback','games','performance','displays')][string]$Command,
+    [Parameter(Mandatory)][ValidateSet('profile','eligibility','preview','apply','apply-batch','sessions','rollback','games','performance','displays')][string]$Command,
     [Parameter(Mandatory)][string]$PayloadPath,
     [Parameter(Mandatory)][string]$ResultPath,
     [Parameter(Mandatory)][string]$ModulesPath
@@ -68,6 +68,22 @@ try {
             $plan = @(Invoke-OrionTweak -Tweak $payload.tweak)
             Complete-OrionSession
             Write-Result $true @{ sessionId = $sessionId; changes = $plan }
+        }
+        'apply-batch' {
+            Set-OrionRegistryMode -Mode $(if ($payload.mode -eq 'Real') { 'Real' } else { 'Mock' }) -MockPath $mockPath
+            $sessionId = Start-OrionSession -Note "desktop:$($payload.note)"
+            $applied = @()
+            try {
+                foreach ($tweak in @($payload.tweaks)) {
+                    $plan = @(Invoke-OrionTweak -Tweak $tweak)
+                    $applied += @{ id = $tweak.id; changes = $plan }
+                }
+            } finally {
+                # Mesmo que uma alteracao falhe a meio, o journal conserva o
+                # que ja foi aplicado para a sessao poder ser revertida.
+                Complete-OrionSession
+            }
+            Write-Result $true @{ sessionId = $sessionId; applied = $applied }
         }
         'sessions' {
             $sessions = @(Get-OrionSessions | Sort-Object startedAt -Descending)
