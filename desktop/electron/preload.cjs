@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("orion", {
   appVersion: () => ipcRenderer.invoke("app:version"),
+  elevate: () => ipcRenderer.invoke("app:elevate"),
   getSettings: () => ipcRenderer.invoke("settings:get"),
   saveSettings: (settings) => ipcRenderer.invoke("settings:save", settings),
   login: (credentials) => ipcRenderer.invoke("auth:login", credentials),

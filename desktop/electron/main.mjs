@@ -234,6 +234,35 @@ function runProcess(file, args) {
   });
 }
 
+function powerShellString(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+async function relaunchElevated() {
+  if (process.platform !== "win32") throw new Error("O modo administrador esta disponivel apenas no Windows.");
+  if (!app.isPackaged) throw new Error("Instala o Orion Optimizer para ativares o modo administrador.");
+
+  const profile = await invokeBridge("profile");
+  if (profile?.isAdmin) return { relaunching: false, elevated: true };
+
+  // O bloqueio de instancia tem de ser libertado antes de abrir a copia
+  // elevada; de outro modo o Electron fecha a nova instancia como duplicada.
+  app.releaseSingleInstanceLock();
+  try {
+    const command = [
+      "$ErrorActionPreference = 'Stop'",
+      `Start-Process -FilePath ${powerShellString(process.execPath)} -Verb RunAs -ErrorAction Stop`,
+    ].join("; ");
+    await runProcess("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command]);
+  } catch (error) {
+    app.requestSingleInstanceLock();
+    throw error;
+  }
+
+  setTimeout(() => app.quit(), 350);
+  return { relaunching: true, elevated: false };
+}
+
 async function invokeBridge(command, payload = {}, elevated = false) {
   const id = crypto.randomUUID();
   const tempDir = path.join(app.getPath("temp"), "OrionOptimizer");
@@ -335,6 +364,7 @@ async function authorizedTweak(id, revalidate = false) {
 
 function registerIpc() {
   ipcMain.handle("app:version", () => app.getVersion());
+  ipcMain.handle("app:elevate", relaunchElevated);
   ipcMain.handle("settings:get", readSettings);
   ipcMain.handle("settings:save", (_event, settings) => saveSettings(settings));
   ipcMain.handle("system:profile", async () => {

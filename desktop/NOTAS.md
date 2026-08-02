@@ -6,6 +6,6 @@ alguem carregar em actualizar. Linhas com # sao ignoradas.
 
 Limpar depois de publicar.
 
+- Novo botao nas Definicoes para reabrir o Optimizer em modo administrador
+- A sessao elevada mostra o estado real do Windows e pede confirmacao UAC apenas quando necessario
 - Detecao de jogos Xbox e PC Game Pass em todas as pastas XboxGames dos discos instalados
-- Jogos Microsoft Store continuam suportados sem aceder diretamente a WindowsApps
-- Corrigido o update pelo site quando o servidor guardado na app aponta para localhost

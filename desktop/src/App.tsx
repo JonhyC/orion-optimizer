@@ -202,6 +202,15 @@ export default function App() {
     setView("catalog");
   }
 
+  async function elevateApp() {
+    try {
+      const result = await window.orion.elevate();
+      if (result.elevated) setToast({ tone: "good", message: "O Optimizer ja esta em modo administrador." });
+    } catch (error) {
+      setToast({ tone: "bad", message: cleanError(error) });
+    }
+  }
+
   if (!settings) return <MotionConfig reducedMotion={animations ? "user" : "always"}><div className="app-frame"><TitleBar version={appVersion} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} /><BootScreen /></div></MotionConfig>;
 
   return (
@@ -235,7 +244,7 @@ export default function App() {
                 {view === "games" && <GamesView key="games" state={catalog} notify={setToast} />}
                 {view === "performance" && <PerformanceView key="performance" profile={profile} notify={setToast} />}
                 {view === "history" && <HistoryView key="history" notify={setToast} />}
-                {view === "settings" && <SettingsView key="settings" account={catalog.account} profile={profile} settings={settings} appVersion={appVersion} theme={theme} setTheme={setTheme} animations={animations} setAnimations={setAnimations} density={density} setDensity={setDensity} />}
+                {view === "settings" && <SettingsView key="settings" account={catalog.account} profile={profile} settings={settings} appVersion={appVersion} theme={theme} setTheme={setTheme} animations={animations} setAnimations={setAnimations} density={density} setDensity={setDensity} onElevate={elevateApp} />}
                 {view === "internal" && (
                   <InternalView key="internal" state={catalog} profile={profile} settings={settings} notify={setToast} />
                 )}
@@ -1185,7 +1194,7 @@ function OperationMetric({ label, value, detail, tone = "default" }: { label: st
   return <div className={`operation-metric ${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>;
 }
 
-function SettingsView({ account, profile, settings, appVersion, theme, setTheme, animations, setAnimations, density, setDensity }: {
+function SettingsView({ account, profile, settings, appVersion, theme, setTheme, animations, setAnimations, density, setDensity, onElevate }: {
   account: OrionAccount;
   profile: SystemProfile | null;
   settings: LoginSettings;
@@ -1196,12 +1205,14 @@ function SettingsView({ account, profile, settings, appVersion, theme, setTheme,
   setAnimations: (enabled: boolean) => void;
   density: Density;
   setDensity: (density: Density) => void;
+  onElevate: () => Promise<void>;
 }) {
+  const [elevating, setElevating] = useState(false);
   const rows = [
     { icon: <Laptop />, label: "Tipo de dispositivo", value: profile?.chassis === "laptop" ? "Portátil" : "Desktop" },
     { icon: <MonitorCog />, label: "Adaptadores gráficos", value: profile?.gpuNames?.join(" · ") || "Não detetado" },
     { icon: <MemoryStick />, label: "Memória instalada", value: `${profile?.ramGB ?? 0} GB RAM` },
-    { icon: <ShieldCheck />, label: "Sessão elevada", value: profile?.isAdmin ? "Sim" : "Não" },
+    { icon: <ShieldCheck />, label: "Sessão elevada", value: profile?.isAdmin ? "Sim" : "Não", canElevate: !profile?.isAdmin },
     { icon: <Activity />, label: "Motor de execução", value: profile?.executionMode === "Mock" ? "Simulação" : "Real" },
     { icon: <Wifi />, label: "Servidor", value: settings.server },
   ];
@@ -1243,7 +1254,7 @@ function SettingsView({ account, profile, settings, appVersion, theme, setTheme,
 
       <section className="settings-panel device-panel">
         <div className="settings-panel-heading"><span className="settings-panel-icon"><MonitorCog size={17} /></span><div><h2>Dispositivo e ligação</h2><p>Hardware detetado e motor de execução</p></div></div>
-        <div className="settings-device-grid">{rows.map((row) => <div className="system-row" key={row.label}><div className="system-row-icon">{row.icon}</div><div><span>{row.label}</span><strong>{row.value}</strong></div><Check size={16} className="system-check" /></div>)}</div>
+        <div className="settings-device-grid">{rows.map((row) => <div className="system-row" key={row.label}><div className="system-row-icon">{row.icon}</div><div><span>{row.label}</span><strong>{row.value}</strong></div>{row.canElevate ? <button className="elevate-button" disabled={elevating} onClick={async () => { setElevating(true); await onElevate(); setElevating(false); }}><ShieldCheck size={13} />{elevating ? "A pedir..." : "Ativar administrador"}</button> : <Check size={16} className="system-check" />}</div>)}</div>
       </section>
 
       <section className="safety-band"><ShieldCheck size={22} /><div><strong>Proteção de reversão ativa</strong><span>O estado original é guardado antes de cada alteração.</span></div></section>

@@ -1,12 +1,12 @@
 {
-  "version": "1.1.3",
-  "downloadPath": "https://github.com/JonhyC/orion-optimizer/releases/download/v1.1.3/Orion.Optimizer.Setup.1.1.3.exe",
-  "sha256": "31a01b94dd0b63f91137875b776a7a0e945cf87e03827f6b880f345e628376d9",
-  "sizeBytes": 108694765,
-  "releasedAt": 1785633478,
+  "version": "1.1.4",
+  "downloadPath": "https://github.com/JonhyC/orion-optimizer/releases/download/v1.1.4/Orion.Optimizer.Setup.1.1.4.exe",
+  "sha256": "1e937ecd543296684d21a348c5023403bfbd0cb3aad8e17a3069bf7ab4f005f3",
+  "sizeBytes": 108695193,
+  "releasedAt": 1785633783,
   "notes": [
-    "Detecao de jogos Xbox e PC Game Pass em todas as pastas XboxGames dos discos instalados",
-    "Jogos Microsoft Store continuam suportados sem aceder diretamente a WindowsApps",
-    "Corrigido o update pelo site quando o servidor guardado na app aponta para localhost"
+    "Novo botao nas Definicoes para reabrir o Optimizer em modo administrador",
+    "A sessao elevada mostra o estado real do Windows e pede confirmacao UAC apenas quando necessario",
+    "Detecao de jogos Xbox e PC Game Pass em todas as pastas XboxGames dos discos instalados"
   ]
 }

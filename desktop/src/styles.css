@@ -606,6 +606,9 @@ button.presence-row:hover { background: rgba(155,99,234,.035); }
 .settings-device-grid .system-row { border-right: 1px solid var(--border); background: var(--surface-2); }
 .settings-device-grid .system-row:nth-child(even) { border-right: 0; }
 .settings-device-grid .system-row:nth-last-child(-n+2) { border-bottom: 0; }
+.elevate-button { min-height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 8px; border: 1px solid rgba(155,99,234,.42); border-radius: 5px; background: rgba(155,99,234,.12); color: var(--violet-strong); font-size: 8.5px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.elevate-button:hover:not(:disabled) { border-color: var(--violet); background: rgba(155,99,234,.2); }
+.elevate-button:disabled { cursor: wait; opacity: .65; }
 
 :root[data-theme="light"] .brand-grid { opacity: .08; }
 :root[data-theme="light"] .brand-lockup img { filter: drop-shadow(0 15px 30px rgba(117,55,211,.16)); }

@@ -167,6 +167,7 @@ type OrionDisplay = {
 
 type OrionApi = {
   appVersion(): Promise<string>;
+  elevate(): Promise<{ relaunching: boolean; elevated: boolean }>;
   getSettings(): Promise<{ server: string; username: string }>;
   saveSettings(settings: { server: string; username: string }): Promise<void>;
   login(credentials: {
