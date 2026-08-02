@@ -24,6 +24,7 @@ out/
 desktop/dist/
 desktop/release/
 desktop/release-new/
+desktop/reports/
 
 # Instalador servido pelo site. Passa dos 100 MB por ficheiro que o GitHub
 # aceita - distribuido como asset de Release em vez de versionado.
