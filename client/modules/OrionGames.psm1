@@ -136,24 +136,23 @@ function Get-OrionGogGames {
 
 function Get-OrionXboxGames {
     <#
-        Jogos da Microsoft Store / Game Pass. Ficam em WindowsApps, com
-        nomes de pacote em vez de nomes legiveis, por isso filtra-se pelo
-        que a propria Store marca como jogo.
+        Jogos da Microsoft Store / Game Pass. Ha dois formatos relevantes:
+        pacotes Appx em WindowsApps e instalacoes da Xbox app em
+        X:\XboxGames. O segundo nao aparece como Appx (Fortnite e Forza
+        sao exemplos), por isso ambas as fontes sao lidas.
     #>
     $jogos = @()
     $pacotes = Get-AppxPackage -ErrorAction SilentlyContinue |
         Where-Object { $_.SignatureKind -eq 'Store' -and $_.IsFramework -eq $false }
 
     foreach ($p in $pacotes) {
-        $manifesto = Join-Path $p.InstallLocation 'AppxManifest.xml'
-        if (-not (Test-Path -LiteralPath $manifesto)) { continue }
-        try { $xml = [xml](Get-Content -LiteralPath $manifesto -Raw -ErrorAction Stop) } catch { continue }
+        # WindowsApps e protegido de proposito. Este cmdlet le o manifesto
+        # registado sem exigir permissao de leitura sobre a pasta do jogo.
+        try { $xml = [xml](Get-AppxPackageManifest -Package $p.PackageFullName -ErrorAction Stop).OuterXml } catch { continue }
 
-        # A categoria da aplicacao diz se e jogo. Sem isto vinha o
-        # Bloco de Notas e a Calculadora pelo caminho.
-        $categorias = @($xml.Package.Applications.Application.uap.VisualElements) +
-                      @($xml.Package.Applications.Application)
-        $ehJogo = $xml.OuterXml -match 'windows\.game|Windows\.Game'
+        # A extensao do manifesto identifica jogos Store/Game Pass sem trazer
+        # aplicacoes normais como a Calculadora para a biblioteca.
+        $ehJogo = $xml.OuterXml -match 'windows\.(game|xboxLive)'
         if (-not $ehJogo) { continue }
 
         $nome = $p.Name
@@ -171,7 +170,31 @@ function Get-OrionXboxGames {
             launchUri   = "shell:appsFolder\$($p.PackageFamilyName)!App"
         }
     }
-    return $jogos
+
+    # A Xbox app pode instalar jogos em qualquer disco (C:\XboxGames,
+    # D:\XboxGames, ...). Estas pastas nao sao pacotes Appx e ficavam
+    # invisiveis com a deteccao anterior.
+    $bibliotecas = @(Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.Root 'XboxGames' } |
+        Where-Object { Test-Path -LiteralPath $_ })
+    foreach ($biblioteca in $bibliotecas) {
+        foreach ($pasta in Get-ChildItem -LiteralPath $biblioteca -Directory -Force -ErrorAction SilentlyContinue) {
+            # GameSave guarda apenas dados dos jogos. Uma instalacao Xbox tem
+            # sempre a pasta Content ao lado dos metadados .xvc/.xsp.
+            $conteudo = Join-Path $pasta.FullName 'Content'
+            if (-not (Test-Path -LiteralPath $conteudo)) { continue }
+
+            $jogos += [pscustomobject]@{
+                id          = "xbox-library:$($pasta.FullName.ToLowerInvariant())"
+                name        = $pasta.Name
+                platform    = 'Xbox / PC Game Pass'
+                installPath = $pasta.FullName
+                sizeBytes   = 0
+                launchUri   = $null
+            }
+        }
+    }
+    return @($jogos | Sort-Object -Property id -Unique)
 }
 
 function Get-OrionGames {

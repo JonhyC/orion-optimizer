@@ -1,12 +1,12 @@
 {
-  "version": "1.1.2",
-  "downloadPath": "https://github.com/JonhyC/orion-optimizer/releases/download/v1.1.2/Orion.Optimizer.Setup.1.1.2.exe",
-  "sha256": "c426396ed45b5b88dda6f6c1f8eb19ff34d7cbd2217cb1ca94669d7879fd7176",
-  "sizeBytes": 108694241,
-  "releasedAt": 1785633026,
+  "version": "1.1.3",
+  "downloadPath": "https://github.com/JonhyC/orion-optimizer/releases/download/v1.1.3/Orion.Optimizer.Setup.1.1.3.exe",
+  "sha256": "31a01b94dd0b63f91137875b776a7a0e945cf87e03827f6b880f345e628376d9",
+  "sizeBytes": 108694765,
+  "releasedAt": 1785633478,
   "notes": [
-    "Corrigido o update pelo site quando o servidor guardado na app aponta para localhost",
-    "O painel descarrega o instalador oficial nas versoes anteriores, sem depender do atualizador antigo",
-    "Futuras atualizacoes automaticas usam o feed enviado pelo site"
+    "Detecao de jogos Xbox e PC Game Pass em todas as pastas XboxGames dos discos instalados",
+    "Jogos Microsoft Store continuam suportados sem aceder diretamente a WindowsApps",
+    "Corrigido o update pelo site quando o servidor guardado na app aponta para localhost"
   ]
 }

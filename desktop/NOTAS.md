@@ -6,6 +6,6 @@ alguem carregar em actualizar. Linhas com # sao ignoradas.
 
 Limpar depois de publicar.
 
+- Detecao de jogos Xbox e PC Game Pass em todas as pastas XboxGames dos discos instalados
+- Jogos Microsoft Store continuam suportados sem aceder diretamente a WindowsApps
 - Corrigido o update pelo site quando o servidor guardado na app aponta para localhost
-- O painel descarrega o instalador oficial nas versoes anteriores, sem depender do atualizador antigo
-- Futuras atualizacoes automaticas usam o feed enviado pelo site

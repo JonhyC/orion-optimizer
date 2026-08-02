@@ -649,7 +649,7 @@ function GamesView({ state, notify }: { state: CatalogState; notify: (toast: { t
       {games === null ? (
         <div className="page-loading"><Spinner />A procurar jogos instalados</div>
       ) : games.length === 0 ? (
-        <EmptyState icon={<Gamepad2 />} title="Sem jogos detetados" text="Instala Steam, Epic, GOG ou jogos da Store para aparecerem aqui." />
+        <EmptyState icon={<Gamepad2 />} title="Sem jogos detetados" text="Instala Steam, Epic, GOG, Microsoft Store ou Xbox/Game Pass para aparecerem aqui." />
       ) : (
         <div className="games-grid">
           {games.map((game, index) => (
