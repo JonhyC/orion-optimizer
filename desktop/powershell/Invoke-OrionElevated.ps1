@@ -8,7 +8,7 @@ param(
 
 $arguments = @(
     '-NoProfile',
-    '-ExecutionPolicy', 'Bypass',
+    '-ExecutionPolicy', 'RemoteSigned',
     '-File', ('"{0}"' -f $BridgePath),
     '-Command', $Command,
     '-PayloadPath', ('"{0}"' -f $PayloadPath),

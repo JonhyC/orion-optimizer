@@ -275,7 +275,7 @@ async function invokeBridge(command, payload = {}, elevated = false) {
   const bridgeArgs = [
     "-NoProfile",
     "-ExecutionPolicy",
-    "Bypass",
+    "RemoteSigned",
     "-File",
     path.join(scripts, "OrionBridge.ps1"),
     "-Command",
@@ -293,7 +293,7 @@ async function invokeBridge(command, payload = {}, elevated = false) {
       await runProcess("powershell.exe", [
         "-NoProfile",
         "-ExecutionPolicy",
-        "Bypass",
+        "RemoteSigned",
         "-File",
         path.join(scripts, "Invoke-OrionElevated.ps1"),
         "-BridgePath",

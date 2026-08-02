@@ -17,13 +17,21 @@ const windowsDir = path.join(site, "public", "downloads", "windows");
 const localPublish = process.argv.includes("--local");
 const repository = process.env.ORION_GITHUB_REPOSITORY || "JonhyC/orion-optimizer";
 const tag = `v${pkg.version}`;
-const setupSize = (await fs.stat(sourceSetup)).size;
+let setupSize = 0;
 
-for (const file of [sourceSetup, sourceBlockmap, sourceManifest]) {
-  await fs.access(file);
+for (const [label, file] of [["instalador", sourceSetup], ["blockmap", sourceBlockmap], ["manifesto", sourceManifest]]) {
+  try {
+    await fs.access(file);
+  } catch {
+    throw new Error(`A release foi bloqueada: ${label} nao encontrado. O Microsoft Defender pode te-lo colocado em quarentena.`);
+  }
 }
+setupSize = (await fs.stat(sourceSetup)).size;
 
-if (!localPublish) runGh(["auth", "status", "--hostname", "github.com"]);
+if (!localPublish) {
+  requireValidWindowsSignature(sourceSetup);
+  runGh(["auth", "status", "--hostname", "github.com"]);
+}
 
 const updateInfo = yaml.load(await fs.readFile(sourceManifest, "utf8"));
 if (!updateInfo || typeof updateInfo !== "object" || !Array.isArray(updateInfo.files)) {
@@ -124,6 +132,22 @@ function releaseExists() {
     stdio: "ignore",
     windowsHide: true,
   }).status === 0;
+}
+
+function requireValidWindowsSignature(file) {
+  const escapedPath = file.replaceAll("'", "''");
+  const command = [
+    `$signature = Get-AuthenticodeSignature -FilePath '${escapedPath}' -ErrorAction Stop`,
+    "if ($signature.Status -ne 'Valid') { Write-Error ('Assinatura Authenticode invalida: ' + $signature.Status); exit 1 }",
+  ].join("; ");
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-Command", command], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (result.error || result.status !== 0) {
+    const detail = result.stderr?.trim() || result.stdout?.trim() || "certificado de assinatura em falta";
+    throw new Error(`A release foi bloqueada: o instalador nao tem uma assinatura Authenticode valida (${detail}).`);
+  }
 }
 
 function publishedSetupUrl() {

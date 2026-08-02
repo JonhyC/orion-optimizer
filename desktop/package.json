@@ -40,6 +40,7 @@
     "appId": "pt.orionoptimizer.desktop",
     "productName": "Orion Optimizer",
     "asar": true,
+    "forceCodeSigning": true,
     "protocols": [
       {
         "name": "Orion Optimizer",
@@ -74,6 +75,9 @@
     ],
     "win": {
       "icon": "build/icon.png",
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
       "target": [
         {
           "target": "nsis",

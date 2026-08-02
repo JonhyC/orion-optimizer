@@ -16,7 +16,7 @@ function Invoke-BridgeTest {
     $Payload | Add-Member -NotePropertyName dataDir -NotePropertyValue $work -Force
     $Payload | Add-Member -NotePropertyName mode -NotePropertyValue 'Mock' -Force
     $Payload | ConvertTo-Json -Depth 30 | Out-File $inputPath -Encoding utf8
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridge `
+    & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File $bridge `
         -Command $Command -PayloadPath $inputPath -ResultPath $outputPath -ModulesPath $modules
     $result = Get-Content $outputPath -Raw | ConvertFrom-Json
     if (-not $result.ok) { throw $result.error }
