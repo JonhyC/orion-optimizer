@@ -1,15 +1,46 @@
 import { currentUser, roleAtLeast } from "@/lib/session";
 import { avatarUrl } from "@/lib/discord";
 import { countUnreadSupport } from "@/lib/repo/support";
+import { motivoDeIndisponibilidade, textoIndisponivel } from "@/lib/indisponivel";
 import PanelHeader, { type AdminLink } from "./PanelHeader";
+import PainelIndisponivel from "./PainelIndisponivel";
 
 export const dynamic = "force-dynamic";
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
-  const user = await currentUser();
+  /**
+   * A leitura da sessao pode falhar por causas que nada tem a ver com
+   * quem esta a navegar - quota esgotada, ligacao em baixo. Sem este
+   * try/catch o erro subia ate ao topo e o painel inteiro respondia com
+   * um ecra branco a dizer "Application error", sem sequer mostrar o
+   * login.
+   *
+   * NAO se trata a falha como "sessao invalida": deitar alguem fora por
+   * causa de um problema de infraestrutura fa-lo-ia perder o que estava a
+   * fazer e mandava-o para um login que tambem nao ia funcionar.
+   */
+  let user: Awaited<ReturnType<typeof currentUser>> = null;
+  try {
+    user = await currentUser();
+  } catch (erro) {
+    const motivo = motivoDeIndisponibilidade(erro);
+    if (!motivo) throw erro;
+    console.error("[orion] painel indisponivel:", (erro as Error)?.message ?? erro);
+    return <PainelIndisponivel {...textoIndisponivel(motivo)} />;
+  }
+
   const hasDashboard = Boolean(user?.tier) || roleAtLeast(user, "staff");
   const adminLinks = user ? adminLinksFor(user) : [];
-  const supportUnread = user ? await countUnreadSupport(user) : { mine: 0, staff: 0 };
+  // O contador do suporte e um enfeite: se falhar, o painel abre a zero
+  // em vez de nao abrir de todo.
+  let supportUnread = { mine: 0, staff: 0 };
+  if (user) {
+    try {
+      supportUnread = await countUnreadSupport(user);
+    } catch (erro) {
+      console.error("[orion] contador de suporte indisponivel:", (erro as Error)?.message ?? erro);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[var(--panel-bg)]">
