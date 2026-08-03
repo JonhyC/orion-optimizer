@@ -27,6 +27,16 @@ const config: Config = {
           dark: "#5C3A12",
         },
         muted: "#8A94A6",
+      /**
+       * Espelham --critical e --good do globals.css.
+       *
+       * Existem porque o Tailwind 3 nao consegue aplicar opacidade a um
+       * var() arbitrario: `bg-[var(--critical)]/10` nao gera regra
+       * nenhuma. Como cores do tema, `bg-critical/10` ja funciona.
+       * Manter os dois valores em sincronia com o globals.css.
+       */
+      critical: "#D03B3B",
+      good: "#0CA30C",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],

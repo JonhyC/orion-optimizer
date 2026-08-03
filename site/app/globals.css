@@ -11,6 +11,11 @@
     --panel-surface: #080808;
     --panel-surface-2: #101010;
 
+    /* A barra e ligeiramente mais clara do que a pagina: com o blur por
+       cima, e o que a destaca do conteudo sem precisar de contorno. */
+    --navbar-bg: #090909;
+    --navbar-shadow: 0 8px 28px -12px rgba(0, 0, 0, 0.9);
+
     --chart-1: #d6a75b;
     --chart-grid: #202020;
     --chart-axis: #9a907e;
@@ -24,6 +29,53 @@
 
   * {
     @apply border-white/5;
+  }
+
+  /**
+   * Barra do painel.
+   *
+   * O fundo, o blur, a sombra e a altura sao transicoes CSS e nao
+   * animacoes JS: sao mais baratas, nao dependem de requestAnimationFrame
+   * (que o browser suspende em separadores em segundo plano, deixando a
+   * barra a meio da transicao) e respeitam prefers-reduced-motion sem
+   * codigo extra.
+   *
+   * O rgba() esta escrito por extenso porque o Tailwind 3 nao consegue
+   * aplicar opacidade a um var(): `bg-[var(--navbar-bg)]/72` nao gera
+   * regra nenhuma.
+   */
+  .orion-navbar {
+    background-color: rgba(9, 9, 9, 0.72);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+    transition:
+      background-color 0.3s ease,
+      backdrop-filter 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+
+  .orion-navbar[data-compacta="sim"] {
+    background-color: rgba(9, 9, 9, 0.86);
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    box-shadow: var(--navbar-shadow);
+  }
+
+  .orion-navbar-inner {
+    height: 70px;
+    transition: height 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .orion-navbar[data-compacta="sim"] .orion-navbar-inner {
+    height: 58px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orion-navbar,
+    .orion-navbar-inner {
+      transition: none;
+    }
   }
 
   html {
