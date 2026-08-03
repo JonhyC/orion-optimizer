@@ -6,12 +6,11 @@ alguem carregar em actualizar. Linhas com # sao ignoradas.
 
 Limpar depois de publicar.
 
-- Sidebar redesenhada com grupos mais claros e area interna para staff, developer e owner
-- Detalhe interno do utilizador mostra a versao instalada do Optimizer
-- Painel do site mostra credenciais do cliente Windows num modal sem sair do dashboard
-- Owner pode configurar versoes da aplicacao por plano, staff e developer
-- Seletor de versoes mostra releases ja publicadas em modal horizontal
-- Jogos e desempenho abrem mais rapido com cache local e pre-carregamento apos login
-- Refresh manual continua a forcar leitura real do Windows
-- Modal dos jogos ganhou perfil visual por jogo com ecra, Hz, modo de janela e arranque pela loja
-- Pagina Definicoes remodelada com categorias completas, auto-save local e controlos preparados para futuras funcionalidades
+- Roblox e Roblox Studio passam a ser detetados na biblioteca de jogos
+- Barra lateral redesenhada: itens com altura igual, estado ativo com barra dourada que desliza e brilho subtil
+- Cartao de acesso interno passa a ser clicavel e leva ao Centro da equipa
+- Estado da protecao mostra indicador em tempo real com a versao instalada
+- Perfil abre menu com atalhos diretos para as seccoes das Definicoes
+- Barra lateral pode ficar so com icones, com a preferencia guardada entre arranques
+- Em janelas estreitas a barra lateral passa a gaveta, que fecha ao clicar fora
+- Contador de otimizacoes ativas e de novidades do historico na propria barra
