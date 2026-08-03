@@ -26,8 +26,6 @@ import {
 } from "@/lib/session";
 import { hashPassword } from "@/lib/auth";
 import crypto from "node:crypto";
-import { promises as fs } from "fs";
-import path from "path";
 import {
   flushDiscordRoleSync,
   processExpiredPlans,
@@ -36,11 +34,10 @@ import {
 import { fetchDiscordGuildRoles } from "@/lib/discord";
 import {
   PLAN_COVER_URL_PREFIX,
-  ensurePlanCoversDirectory,
-  planCoversDir,
 } from "@/lib/storage-paths";
 import { allPlans, createPlan, deletePlan, findPlanByCode, findPlanById, updatePlan } from "@/lib/repo/plans";
 import { findOrder, listAllOrders, updateOrder } from "@/lib/repo/orders";
+import { MAX_BYTES, apagarCapa, guardarCapa, idDoUrl } from "@/lib/repo/plan-covers";
 import { createCoupon, normalizeCouponCode, updateCoupon } from "@/lib/repo/coupons";
 import { optimizerRelease } from "@/lib/optimizer-release";
 import { SEMVER, compareVersions } from "@/lib/version";
@@ -602,20 +599,43 @@ async function savePlanCover(formData: FormData): Promise<string | undefined> {
     (cover.type === "image/avif" && bytes.subarray(4, 12).toString("ascii").startsWith("ftypavi"));
   if (!valid) return undefined;
 
-  ensurePlanCoversDirectory();
+  // Acima de MAX_BYTES o documento nao cabe depois de codificado em
+  // base64. Devolver undefined aqui deixaria o plano a gravar sem capa e
+  // sem explicacao, portanto o limite e verificado antes, em
+  // validarCapa(), que produz mensagem.
+  if (bytes.byteLength > MAX_BYTES) return undefined;
 
-  const filename = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
-  await fs.writeFile(path.join(planCoversDir, filename), bytes);
-  return `${PLAN_COVER_URL_PREFIX}/${filename}`;
+  const id = await guardarCapa(bytes, cover.type);
+  return `${PLAN_COVER_URL_PREFIX}/${id}`;
+}
+
+/**
+ * Valida a capa ANTES de gravar o plano, para poder explicar o problema.
+ *
+ * Devolve null quando esta tudo bem ou quando nao foi enviada capa
+ * nenhuma - trocar a capa e opcional.
+ */
+function validarCapa(formData: FormData): string | null {
+  const cover = formData.get("cover");
+  if (!(cover instanceof File) || cover.size === 0) return null;
+  if (!PLAN_COVER_TYPES[cover.type]) {
+    return "A capa tem de ser JPG, PNG, WebP ou AVIF.";
+  }
+  if (cover.size > MAX_BYTES) {
+    return `A capa tem ${Math.round(cover.size / 1024)} KB e o limite é ${Math.round(MAX_BYTES / 1024)} KB. Corta-a no editor ou usa uma imagem mais pequena.`;
+  }
+  return null;
 }
 
 async function removePlanCoverFile(coverUrl: string | null): Promise<void> {
-  if (!coverUrl || !/^\/uploads\/plans\/[a-zA-Z0-9._-]+$/.test(coverUrl)) return;
-  const filename = path.basename(coverUrl);
+  const id = idDoUrl(coverUrl);
+  if (!id) return;
   try {
-    await fs.unlink(path.join(planCoversDir, filename));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    await apagarCapa(id);
+  } catch (erro) {
+    // Uma capa orfa nao impede nada de funcionar; rebentar aqui impediria
+    // a gravacao do plano.
+    console.error("[orion] falha a apagar capa:", (erro as Error)?.message ?? erro);
   }
 }
 
@@ -644,6 +664,9 @@ export async function updatePlanAction(
   // dois valores e quem ganhava dependia da ordem no DOM.
   const active = formData.get("publishNow") === "1" || formData.get("active") === "1" ? 1 : 0;
   const sortOrder = Number(formData.get("sortOrder") ?? 0);
+
+  const erroCapa = validarCapa(formData);
+  if (erroCapa) return { error: erroCapa };
 
   const erro = validarPlano({
     code, name, priceEuros,
@@ -735,6 +758,9 @@ export async function createPlanAction(
   const discordRoleId = planDiscordRoleId(formData);
   const active = formData.get("publishNow") === "1" || formData.get("active") === "1" ? 1 : 0;
   const sortOrder = Number(formData.get("sortOrder") ?? 0);
+
+  const erroCapa = validarCapa(formData);
+  if (erroCapa) return { error: erroCapa };
 
   const erro = validarPlano({
     code, name, priceEuros,

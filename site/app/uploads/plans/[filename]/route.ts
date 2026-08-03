@@ -1,34 +1,22 @@
-import { readFile, stat } from "node:fs/promises";
-import path from "node:path";
-import { planCoversDir } from "@/lib/storage-paths";
+import { lerCapa } from "@/lib/repo/plan-covers";
 
 export const runtime = "nodejs";
 
 /**
  * Entrega das capas de planos.
  *
- * As capas vivem no volume, fora de public/, porque ficheiros escritos em
- * public/ desaparecem no deploy seguinte - o contentor e reconstruido a
- * partir do repositorio e as capas nunca passam pelo git. Como saem de
- * public/, o Next deixa de as servir sozinho, e e esta rota que o faz.
- *
- * Le o ficheiro para memoria em vez de o transmitir em stream: o upload
- * esta limitado a 5 MB, portanto nao vale a pena o risco de gerir um
- * corpo em stream por uns quilobytes de RAM.
+ * As capas vivem no Firestore e nao em disco. Antes eram escritas com
+ * fs.writeFile: na Vercel o sistema de ficheiros e efemero, portanto a
+ * capa desaparecia no deploy seguinte e o cartao do plano ficava vazio na
+ * pagina de precos, sem nada a indicar porque.
  *
  * Sao publicas de proposito: aparecem na pagina de precos, antes de haver
  * sessao. Nao ha aqui verificacao de utilizador nenhuma.
  */
 
-const CONTENT_TYPES: Record<string, string> = {
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".png": "image/png",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-};
+const TIPOS_PERMITIDOS = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 
-const notFound = () => new Response("Not found", { status: 404 });
+const naoEncontrado = () => new Response("Not found", { status: 404 });
 
 export async function GET(
   _req: Request,
@@ -36,38 +24,31 @@ export async function GET(
 ) {
   const { filename } = await params;
 
-  // O nome vem do URL. Sem esta barreira, "..%2F..%2Forion.sqlite" servia
-  // a base de dados inteira, com hashes de password la dentro. A lista
-  // branca exclui barras e pontos consecutivos; o resolve() abaixo e a
-  // segunda linha de defesa.
-  if (!/^[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+$/.test(filename)) return notFound();
-
-  const type = CONTENT_TYPES[path.extname(filename).toLowerCase()];
-  if (!type) return notFound();
-
-  const full = path.resolve(planCoversDir, filename);
-  if (path.dirname(full) !== path.resolve(planCoversDir)) return notFound();
+  // O nome vem do URL e vai parar a um caminho de documento. A lista
+  // branca exclui barras, pontos e tudo o que permitisse sair da
+  // coleccao das capas.
+  if (!/^[A-Za-z0-9-]{10,80}$/.test(filename)) return naoEncontrado();
 
   try {
-    const info = await stat(full);
-    if (!info.isFile()) return notFound();
+    const capa = await lerCapa(filename);
+    if (!capa) return naoEncontrado();
 
-    const bytes = await readFile(full);
-    return new Response(new Uint8Array(bytes), {
+    // O mime vem da base de dados; se nao for um dos que aceitamos no
+    // upload, nao e servido - evita que um documento adulterado passe a
+    // devolver, por exemplo, text/html.
+    if (!TIPOS_PERMITIDOS.has(capa.mime)) return naoEncontrado();
+
+    return new Response(new Uint8Array(capa.bytes), {
       headers: {
-        "Content-Type": type,
-        "Content-Length": String(info.size),
-        "Last-Modified": info.mtime.toUTCString(),
-        // O nome leva timestamp e UUID, portanto o conteudo de um dado URL
+        "Content-Type": capa.mime,
+        "Content-Length": String(capa.bytes.byteLength),
+        // O id leva timestamp e UUID, portanto o conteudo de um dado URL
         // nunca muda: pode ficar em cache para sempre.
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT" && code !== "ENOTDIR") {
-      console.error(`[orion] falha a servir capa ${filename}:`, error);
-    }
-    return notFound();
+  } catch (erro) {
+    console.error(`[orion] falha a servir capa ${filename}:`, (erro as Error)?.message ?? erro);
+    return naoEncontrado();
   }
 }
