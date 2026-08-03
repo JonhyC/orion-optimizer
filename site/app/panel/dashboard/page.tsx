@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   Activity,
+  AlertTriangle,
   CalendarDays,
   Check,
   ExternalLink,
@@ -20,7 +21,16 @@ import { nowSeconds, NO_PASSWORD } from "@/lib/db";
 import { auditForUser } from "@/lib/repo/audit";
 import { processExpiredPlans } from "@/lib/plan-expiry";
 import { requireUser, roleAtLeast } from "@/lib/session";
-import { dateTime, money, ordersForUser } from "@/lib/stats";
+import { dateTime, ordersForUser } from "@/lib/stats";
+import {
+  ACCOES_VISIVEIS,
+  estadoDaLicenca,
+  estadoDoSuporte,
+  requisitosDeAcesso,
+  requisitosEmFalta,
+  rotuloDeAtividade,
+  totalGasto,
+} from "@/lib/personal-dashboard";
 import { optimizerRelease, releaseForPlan, updateStatus } from "@/lib/optimizer-release";
 import { findAppVersionTarget } from "@/lib/repo/app-versions";
 import { findPlanByCode } from "@/lib/repo/plans";
@@ -43,29 +53,12 @@ type PersonalPlan = {
 
 type ActivityRow = { action: string; created_at: number };
 
-/** Accoes que valem a pena mostrar ao cliente. As restantes sao ruido interno. */
-const ACTIVITY_ACTIONS = new Set([
-  "login_ok",
-  "login_discord_verified",
-  "catalog_served",
-  "hwid_bound",
-  "client_password_generated",
-  "panel_login_ok",
-  "logout",
-  "discord_plan_roles_synced",
-  "self_hwid_reset",
-]);
-
-const ACTIVITY_LABEL: Record<string, string> = {
-  login_ok: "Sessao iniciada no Orion Optimizer 2.0",
-  login_discord_verified: "Cargos Discord verificados",
-  catalog_served: "Catalogo de otimizacoes carregado",
-  hwid_bound: "Computador associado a licenca",
-  self_hwid_reset: "Computador removido da licenca",
-  client_password_generated: "Credenciais Windows atualizadas",
-  panel_login_ok: "Sessao iniciada no painel",
-  logout: "Sessao do Optimizer terminada",
-  discord_plan_roles_synced: "Cargo do plano sincronizado no Discord",
+/** Icone por requisito. A lista em si vive em lib/personal-dashboard. */
+const REQUISITO_ICONE: Record<string, React.ReactNode> = {
+  conta: <UserRound size={15} />,
+  discord: <MessageCircle size={15} />,
+  computador: <HardDrive size={15} />,
+  credenciais: <KeyRound size={15} />,
 };
 
 export default async function PersonalDashboardPage() {
@@ -90,26 +83,34 @@ export default async function PersonalDashboardPage() {
   const updater = updateStatus(release, user.client_version);
   const orders = await ordersForUser(user.id);
   const paidOrders = orders.filter((order) => order.status === "paid");
-  const totalSpent = paidOrders.reduce((sum, order) => sum + order.amount_cents, 0);
   // Filtra-se em memoria e nao no Firestore de proposito: um `where` por
   // accao alem do `where` por utilizador exigiria um indice composto
   // (user_id, action, created_at) so para esta lista. Buscar 40 e ficar
   // com 7 sai mais barato do que manter mais um indice.
   const activity: ActivityRow[] = (await auditForUser(user.id, 40))
-    .filter((entrada) => ACTIVITY_ACTIONS.has(entrada.action))
+    .filter((entrada) => ACCOES_VISIVEIS.has(entrada.action))
     .slice(0, 7)
     .map((entrada) => ({ action: entrada.action, created_at: entrada.created_at }));
 
-  const licenseText = internalAccess && !user.tier
-    ? "Acesso interno"
-    : user.expires_at === null
-      ? "Life-time"
-      : `${Math.max(0, Math.ceil((user.expires_at - now) / 86400))} dias`;
-  const supportText = user.support_lifetime === 1
-    ? "Life-time"
-    : user.support_expires_at && user.support_expires_at > now
-      ? `${Math.ceil((user.support_expires_at - now) / 86400)} dias`
-      : "Nao incluido";
+  const licenca = estadoDaLicenca({
+    tier: user.tier,
+    expiresAt: user.expires_at,
+    agora: now,
+    acessoInterno: internalAccess,
+    contaSuspensa: user.status === "suspended",
+  });
+  const suporte = estadoDoSuporte({
+    supportLifetime: user.support_lifetime,
+    supportExpiresAt: user.support_expires_at,
+    agora: now,
+  });
+  const requisitos = requisitosDeAcesso({
+    contaAtiva: user.status === "active",
+    discordLigado: Boolean(user.discord_id),
+    computadorAssociado: Boolean(user.hwid),
+    credenciaisGeradas: user.password_hash !== NO_PASSWORD,
+  });
+  const emFalta = requisitosEmFalta(requisitos);
   const planName = plan?.name ?? (internalAccess ? "Equipa Orion" : user.tier ?? "Sem plano");
 
   return (
@@ -118,7 +119,7 @@ export default async function PersonalDashboardPage() {
         <div className="min-w-0">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--chart-1)]">
-              Area pessoal
+              Área pessoal
             </div>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-white">Dashboard</h1>
             <p className="mt-1.5 text-[14px] text-white/40">
@@ -126,14 +127,35 @@ export default async function PersonalDashboardPage() {
             </p>
           </div>
 
+          {/* So aparece quando ha mesmo algo a fazer. Um aviso permanente
+              deixa de ser lido ao fim da segunda visita. */}
+          {licenca.urgente && (
+            <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--warning)]/25 bg-[var(--warning)]/[0.07] px-4 py-3">
+              <AlertTriangle size={16} className="shrink-0 text-[var(--warning)]" />
+              <p className="min-w-0 flex-1 text-[13px] text-white/65">
+                {licenca.texto === "Suspensa"
+                  ? "A tua conta está suspensa. Fala com a equipa para a reativar."
+                  : licenca.diasRestantes === 0
+                    ? "A tua licença expirou. Renova para voltares a usar o Orion Optimizer."
+                    : `A tua licença termina em ${licenca.texto}. Renova para não perderes o acesso.`}
+              </p>
+              <Link
+                href={licenca.texto === "Suspensa" ? DISCORD_URL : "/#packages"}
+                className="shrink-0 text-[12.5px] font-semibold text-[var(--warning)] hover:underline"
+              >
+                {licenca.texto === "Suspensa" ? "Falar com a equipa" : "Ver planos"}
+              </Link>
+            </div>
+          )}
+
           <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatTile label="Plano atual" value={planName} foot={user.tier ?? "acesso por cargo"} />
-            <StatTile label="Licenca" value={licenseText} foot="acesso ativo" />
-            <StatTile label="Support Plan" value={supportText} foot={supportText === "Nao incluido" ? "sem cobertura ativa" : "cobertura ativa"} />
+            <StatTile label="Licença" value={licenca.texto} foot={licenca.nota} />
+            <StatTile label="Support Plan" value={suporte.texto} foot={suporte.nota} />
             <StatTile
               label="Compras"
               value={String(paidOrders.length)}
-              foot={paidOrders.length ? `${money(totalSpent)} investidos` : "nenhuma compra registada"}
+              foot={paidOrders.length ? `${totalGasto(orders)} investidos` : "nenhuma compra registada"}
             />
           </div>
         </div>
@@ -150,7 +172,7 @@ export default async function PersonalDashboardPage() {
       </div>
 
       <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-        <Card title="O teu acesso" subtitle="Plano, duracao e funcionalidades associadas">
+        <Card title="O teu acesso" subtitle="Plano, duração e funcionalidades associadas">
           <div className="flex flex-col gap-5 sm:flex-row">
             {plan?.cover_url ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -163,33 +185,55 @@ export default async function PersonalDashboardPage() {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-[18px] font-semibold text-white">{planName}</h2>
-                <StatusBadge status="active" />
+                {/* Derivado, nao fixo: dizia sempre "Ativa" mesmo com a
+                    licenca expirada ou a conta suspensa. */}
+                <StatusBadge status={licenca.badge} />
               </div>
               <p className="mt-2 text-[13px] leading-5 text-white/40">
-                {plan?.description ?? "Acesso interno ao Orion Optimizer 2.0 e ao catalogo de otimizacoes."}
+                {plan?.description ?? "Acesso interno ao Orion Optimizer e ao catálogo de otimizações."}
               </p>
               <div className="mt-4 grid gap-2 text-[12.5px] text-white/45 sm:grid-cols-2">
-                <span className="flex items-center gap-2"><CalendarDays size={14} />Licenca: {licenseText}</span>
-                <span className="flex items-center gap-2"><Headphones size={14} />Suporte: {supportText}</span>
-                <span className="flex items-center gap-2"><ShieldCheck size={14} />Discord verificado</span>
+                <span className="flex items-center gap-2"><CalendarDays size={14} />Licença: {licenca.texto}</span>
+                <span className="flex items-center gap-2"><Headphones size={14} />Suporte: {suporte.texto}</span>
+                {/* Estava escrito a mao como "Discord verificado" e aparecia
+                    mesmo em contas sem Discord - a contradizer o cartao ao lado. */}
+                <span className="flex items-center gap-2">
+                  <ShieldCheck size={14} />
+                  {user.discord_id ? "Discord verificado" : "Discord por ligar"}
+                </span>
                 <span className="flex items-center gap-2"><HardDrive size={14} />{user.hwid ? "PC associado" : "PC por associar"}</span>
               </div>
             </div>
           </div>
         </Card>
 
-        <Card title="Estado da conta" subtitle="Requisitos para utilizar o cliente Windows">
+        <Card
+          title="Estado da conta"
+          subtitle={
+            emFalta === 0
+              ? "Está tudo pronto para usar o cliente Windows"
+              : `${emFalta} ${emFalta === 1 ? "passo em falta" : "passos em falta"} para usar o cliente Windows`
+          }
+        >
           <div className="space-y-3">
-            <AccessCheck icon={<UserRound size={15} />} label="Conta Orion ativa" ready={user.status === "active"} />
-            <AccessCheck icon={<MessageCircle size={15} />} label="Discord ligado" ready={Boolean(user.discord_id)} />
-            <AccessCheck icon={<HardDrive size={15} />} label="Computador associado" ready={Boolean(user.hwid)} optional="feito no primeiro login" />
-            <AccessCheck
-              icon={<KeyRound size={15} />}
-              label="Credenciais Windows"
-              ready={user.password_hash !== NO_PASSWORD}
-              optional="gerir na conta"
-              action={<CredentialsModalButton username={user.username} password={user.client_password} hasPassword={user.password_hash !== NO_PASSWORD} />}
-            />
+            {requisitos.map((requisito) => (
+              <AccessCheck
+                key={requisito.id}
+                icon={REQUISITO_ICONE[requisito.id]}
+                label={requisito.label}
+                ready={requisito.pronto}
+                optional={requisito.pendente}
+                action={
+                  requisito.id === "credenciais" ? (
+                    <CredentialsModalButton
+                      username={user.username}
+                      password={user.client_password}
+                      hasPassword={user.password_hash !== NO_PASSWORD}
+                    />
+                  ) : undefined
+                }
+              />
+            ))}
           </div>
           <Link href="/panel" className="mt-5 inline-flex items-center gap-2 text-[12.5px] font-semibold text-[var(--chart-1)] hover:underline">
             Gerir perfil e credenciais
@@ -199,9 +243,11 @@ export default async function PersonalDashboardPage() {
       </div>
 
       <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-        <Card title="Atividade recente" subtitle="Verificacoes e acessos desta conta">
+        <Card title="Atividade recente" subtitle="Verificações e acessos desta conta">
           {activity.length === 0 ? (
-            <p className="py-8 text-center text-[13px] text-white/30">Ainda nao existe atividade registada.</p>
+            <p className="py-8 text-center text-[13px] text-white/30">
+              Ainda não existe atividade registada. Aparece aqui assim que iniciares sessão no Orion Optimizer.
+            </p>
           ) : (
             <div className="divide-y divide-white/[0.05]">
               {activity.map((item, index) => (
@@ -210,7 +256,7 @@ export default async function PersonalDashboardPage() {
                     <Activity size={14} />
                   </div>
                   <div className="min-w-0 flex-1 truncate text-[13px] text-white/60">
-                    {ACTIVITY_LABEL[item.action] ?? "Atividade da conta"}
+                    {rotuloDeAtividade(item.action)}
                   </div>
                   <time className="shrink-0 text-[11.5px] tabular-nums text-white/25">
                     {dateTime(item.created_at)}
@@ -221,9 +267,9 @@ export default async function PersonalDashboardPage() {
           )}
         </Card>
 
-        <Card title="Acessos rapidos">
+        <Card title="Acessos rápidos">
           <div className="grid gap-2.5">
-            <QuickLink href="/panel" icon={<UserRound size={16} />} title="A minha conta" text="Password, maquina e compras" />
+            <QuickLink href="/panel" icon={<UserRound size={16} />} title="A minha conta" text="Password, máquina e compras" />
             <QuickLink href="/#packages" icon={<ReceiptText size={16} />} title="Planos Orion" text="Ver planos e coberturas" />
             <QuickLink href={DISCORD_URL} icon={<MessageCircle size={16} />} title="Suporte Discord" text="Falar com a equipa Orion" external />
           </div>
