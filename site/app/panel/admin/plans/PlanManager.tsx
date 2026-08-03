@@ -11,6 +11,8 @@ import {
   Clock3,
   Copy,
   Crop as CropIcon,
+  RotateCcw,
+  RotateCw,
   Download,
   Eye,
   FileClock,
@@ -608,6 +610,7 @@ function PlanEditor({
   );
   const [section, setSection] = useState<EditorSection>("info");
   const [durationType, setDurationType] = useState(plan?.days === 0 ? "lifetime" : "days");
+  const [days, setDays] = useState(plan && plan.days > 0 ? String(plan.days) : "30");
   const [supportType, setSupportType] = useState(
     plan?.support_days === null || plan?.support_days === undefined
       ? "none"
@@ -721,6 +724,8 @@ function PlanEditor({
               nextOrder={nextOrder}
               durationType={durationType}
               setDurationType={setDurationType}
+              days={days}
+              setDays={setDays}
               discountActive={discountActive}
               setDiscountActive={setDiscountActive}
             />
@@ -944,6 +949,8 @@ function PlanPricing({
   nextOrder,
   durationType,
   setDurationType,
+  days,
+  setDays,
   discountActive,
   setDiscountActive,
 }: {
@@ -953,6 +960,8 @@ function PlanPricing({
   setDurationType: (value: string) => void;
   discountActive: boolean;
   setDiscountActive: (value: boolean) => void;
+  days: string;
+  setDays: (value: string) => void;
 }) {
   return (
     <EditorCard title="Preco" description="Valor, moeda, IVA, desconto, duracao e posicao manual.">
@@ -995,16 +1004,54 @@ function PlanPricing({
             <option value="lifetime">Life-time</option>
           </select>
         </Field>
-        <Field label="Duracao">
-          <select value={plan?.days === 365 ? "annual" : plan?.days === 30 ? "monthly" : durationType === "lifetime" ? "lifetime" : "custom"} className={inputClass}>
-            <option value="monthly">Mensal</option>
-            <option value="annual">Anual</option>
+        {/* Atalho de duracao.
+            Tinha `value` sem `onChange` e sem `name`: era um campo so de
+            leitura que nao gravava nada e que o React avisava na consola.
+            Agora escreve mesmo no campo dos dias. */}
+        <Field label="Duração">
+          <select
+            value={
+              durationType === "lifetime"
+                ? "lifetime"
+                : days === "30"
+                  ? "monthly"
+                  : days === "90"
+                    ? "quarterly"
+                    : days === "365"
+                      ? "annual"
+                      : "custom"
+            }
+            onChange={(event) => {
+              const escolha = event.target.value;
+              if (escolha === "lifetime") {
+                setDurationType("lifetime");
+                return;
+              }
+              setDurationType("days");
+              if (escolha === "monthly") setDays("30");
+              if (escolha === "quarterly") setDays("90");
+              if (escolha === "annual") setDays("365");
+            }}
+            className={inputClass}
+          >
+            <option value="monthly">Mensal (30 dias)</option>
+            <option value="quarterly">Trimestral (90 dias)</option>
+            <option value="annual">Anual (365 dias)</option>
             <option value="lifetime">Life-time</option>
             <option value="custom">Personalizado</option>
           </select>
         </Field>
         <Field label="Dias">
-          <input name="days" type="number" min="1" required={durationType === "days"} disabled={durationType === "lifetime"} defaultValue={plan && plan.days > 0 ? plan.days : 30} className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-35`} />
+          <input
+            name="days"
+            type="number"
+            min="1"
+            required={durationType === "days"}
+            disabled={durationType === "lifetime"}
+            value={days}
+            onChange={(event) => setDays(event.target.value)}
+            className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-35`}
+          />
         </Field>
         <Field label="Posicao">
           <input name="sortOrder" type="number" defaultValue={plan?.sort_order ?? nextOrder} className={inputClass} />
@@ -1136,7 +1183,14 @@ function PlanBenefits({
       </div>
       <div className="space-y-2">
         {features.map((feature, index) => (
-          <div key={`${index}-${feature}`} className="grid grid-cols-[32px_1fr_auto] items-center gap-2 rounded-xl border border-white/[0.07] bg-black/15 p-3">
+          /* A chave e SO o indice.
+             Era `${index}-${feature}`, ou seja incluia o texto: cada tecla
+             escrita mudava a chave, o React deitava fora o input e criava
+             outro, e o cursor saltava fora ao fim de uma letra. Como o
+             valor destes campos vem todo do estado, o indice e uma chave
+             correcta - reordenar continua a mostrar o texto certo em cada
+             linha. */
+          <div key={index} className="grid grid-cols-[32px_1fr_auto] items-center gap-2 rounded-xl border border-white/[0.07] bg-black/15 p-3">
             <GripVertical size={15} className="text-white/25" />
             <input
               value={feature}
@@ -1409,22 +1463,46 @@ function EditorCard({ title, description, children }: { title: string; descripti
   );
 }
 
+/**
+ * Formatos de recorte.
+ *
+ * O 16:9 e o do cartao do plano - qualquer outro fica com barras ou e
+ * cortado pelo `object-cover` na apresentacao, e por isso esta assinalado
+ * como recomendado. "Livre" e o unico sem proporcao fixa.
+ */
+const FORMATOS: Array<{ id: string; label: string; valor: number | undefined }> = [
+  { id: "16:9", label: "16:9", valor: 16 / 9 },
+  { id: "3:2", label: "3:2", valor: 3 / 2 },
+  { id: "4:3", label: "4:3", valor: 4 / 3 },
+  { id: "1:1", label: "1:1", valor: 1 },
+  { id: "9:16", label: "9:16", valor: 9 / 16 },
+  { id: "livre", label: "Livre", valor: undefined },
+];
+
 function CropEditor({ source, onCancel, onApply }: { source: string; onCancel: () => void; onApply: (file: File) => void }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [cropHeight, setCropHeight] = useState(82);
+  const [formato, setFormato] = useState("16:9");
+  const [rotacao, setRotacao] = useState(0);
   const [frame, setFrame] = useState({ width: 0, height: 0 });
   const [area, setArea] = useState<Area | null>(null);
   const [working, setWorking] = useState(false);
+
+  const proporcao = FORMATOS.find((f) => f.id === formato)?.valor;
+
   const cropSize = useMemo(() => {
+    // Sem proporcao fixa deixa-se o react-easy-crop mandar: e o que
+    // permite arrastar os cantos livremente.
+    if (proporcao === undefined) return undefined;
     if (!frame.width || !frame.height) return undefined;
     const maxWidth = frame.width * 0.92;
     const maxHeight = frame.height * 0.92;
     const wantedHeight = maxHeight * (cropHeight / 100);
-    const height = Math.min(wantedHeight, maxWidth / (16 / 9));
-    return { width: Math.round(height * (16 / 9)), height: Math.round(height) };
-  }, [cropHeight, frame.height, frame.width]);
+    const height = Math.min(wantedHeight, maxWidth / proporcao);
+    return { width: Math.round(height * proporcao), height: Math.round(height) };
+  }, [cropHeight, frame.height, frame.width, proporcao]);
 
   useEffect(() => {
     const element = frameRef.current;
@@ -1442,25 +1520,86 @@ function CropEditor({ source, onCancel, onApply }: { source: string; onCancel: (
         <header className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4">
           <div>
             <h3 className="text-[15px] font-semibold text-white">Recortar capa</h3>
-            <p className="mt-1 text-[11.5px] text-white/35">Ajusta os limites, amplia e arrasta a imagem dentro da area 16:9.</p>
+            <p className="mt-1 text-[11.5px] text-white/35">
+              Escolhe o formato, roda, amplia e arrasta. O cartão do plano é 16:9.
+            </p>
           </div>
           <button type="button" onClick={onCancel} title="Cancelar recorte" aria-label="Cancelar recorte" className="grid h-8 w-8 place-items-center rounded-md text-white/45 hover:bg-white/[0.06] hover:text-white">
             <X size={17} />
           </button>
         </header>
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.07] px-5 py-3">
+          {FORMATOS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFormato(f.id)}
+              aria-pressed={formato === f.id}
+              className={`rounded-lg border px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors ${
+                formato === f.id
+                  ? "border-neon/45 bg-neon/10 text-[var(--chart-1)]"
+                  : "border-white/[0.08] text-white/45 hover:border-white/20 hover:text-white/75"
+              }`}
+              title={f.id === "16:9" ? "Formato do cartão do plano" : undefined}
+            >
+              {f.label}
+              {f.id === "16:9" && <span className="ml-1 text-[9px] uppercase tracking-wide opacity-70">rec.</span>}
+            </button>
+          ))}
+
+          <span className="mx-1 h-5 w-px bg-white/10" />
+
+          <button
+            type="button"
+            onClick={() => setRotacao((r) => (r + 270) % 360)}
+            className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.08] text-white/50 transition-colors hover:border-white/20 hover:text-white"
+            title="Rodar para a esquerda"
+            aria-label="Rodar para a esquerda"
+          >
+            <RotateCcw size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setRotacao((r) => (r + 90) % 360)}
+            className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.08] text-white/50 transition-colors hover:border-white/20 hover:text-white"
+            title="Rodar para a direita"
+            aria-label="Rodar para a direita"
+          >
+            <RotateCw size={14} />
+          </button>
+          {rotacao !== 0 && <span className="text-[11px] tabular-nums text-white/35">{rotacao}°</span>}
+        </div>
+
         <div ref={frameRef} className="relative h-[min(52vh,430px)] min-h-72 bg-black">
-          <Cropper image={source} crop={crop} zoom={zoom} aspect={16 / 9} cropSize={cropSize} objectFit="contain" showGrid onCropChange={setCrop} onZoomChange={setZoom} onCropComplete={(_, pixels) => setArea(pixels)} />
+          <Cropper
+            image={source}
+            crop={crop}
+            zoom={zoom}
+            rotation={rotacao}
+            aspect={proporcao ?? 16 / 9}
+            cropSize={cropSize}
+            objectFit="contain"
+            showGrid
+            onCropChange={setCrop}
+            onZoomChange={setZoom}
+            onRotationChange={setRotacao}
+            onCropComplete={(_, pixels) => setArea(pixels)}
+          />
         </div>
         <div className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto] md:items-end">
           <div className="grid gap-3">
             <Slider label="Zoom" value={zoom} min={1} max={3} step={0.01} onChange={setZoom} icon={<ZoomIn size={15} />} />
-            <Slider label="Altura dos limites do corte" value={cropHeight} min={45} max={100} step={1} onChange={setCropHeight} suffix="%" />
+            {/* Sem proporcao fixa os limites arrastam-se a mao, portanto o
+                cursor da altura nao teria efeito nenhum. */}
+            {proporcao !== undefined && (
+              <Slider label="Altura dos limites do corte" value={cropHeight} min={45} max={100} step={1} onChange={setCropHeight} suffix="%" />
+            )}
           </div>
           <button type="button" disabled={!area || working} onClick={async () => {
             if (!area) return;
             setWorking(true);
             try {
-              onApply(await createCroppedCover(source, area));
+              onApply(await createCroppedCover(source, area, rotacao));
             } catch {
               window.alert("Nao foi possivel recortar esta imagem.");
               setWorking(false);
@@ -1487,14 +1626,52 @@ function Slider({ label, value, min, max, step, onChange, icon, suffix }: { labe
   );
 }
 
-async function createCroppedCover(source: string, area: Area): Promise<File> {
+/** Largura maxima da capa gravada. Ver o comentario em createCroppedCover. */
+const LARGURA_MAXIMA_CAPA = 1400;
+
+/**
+ * Produz a capa final a partir do recorte.
+ *
+ * Duas coisas alem do recorte:
+ *
+ * - Aplica a rotacao escolhida. O react-easy-crop devolve a area em
+ *   coordenadas da imagem JA rodada, portanto e preciso desenhar a imagem
+ *   rodada primeiro e so depois cortar - fazer o contrario cortava o
+ *   sitio errado.
+ *
+ * - Limita a largura a LARGURA_MAXIMA_CAPA. A capa e mostrada num cartao
+ *   de algumas centenas de pixeis, e o destino e um documento do
+ *   Firestore, que nao passa de 1 MiB. Sem tecto, uma foto de telemovel
+ *   recortada podia passar o limite e a gravacao era recusada.
+ */
+async function createCroppedCover(source: string, area: Area, rotacao = 0): Promise<File> {
   const image = await loadImage(source);
+
+  // Tela intermedia com a imagem rodada. Nas rotacoes de 90 e 270 graus a
+  // largura e a altura trocam.
+  const radianos = (rotacao * Math.PI) / 180;
+  const trocaLados = rotacao === 90 || rotacao === 270;
+  const larguraRodada = trocaLados ? image.height : image.width;
+  const alturaRodada = trocaLados ? image.width : image.height;
+
+  const rodada = document.createElement("canvas");
+  rodada.width = larguraRodada;
+  rodada.height = alturaRodada;
+  const ctxRodada = rodada.getContext("2d");
+  if (!ctxRodada) throw new Error("Canvas indisponivel");
+  ctxRodada.translate(larguraRodada / 2, alturaRodada / 2);
+  ctxRodada.rotate(radianos);
+  ctxRodada.drawImage(image, -image.width / 2, -image.height / 2);
+
+  const escala = Math.min(1, LARGURA_MAXIMA_CAPA / Math.max(1, area.width));
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(area.width));
-  canvas.height = Math.max(1, Math.round(area.height));
+  canvas.width = Math.max(1, Math.round(area.width * escala));
+  canvas.height = Math.max(1, Math.round(area.height * escala));
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Canvas indisponivel");
-  context.drawImage(image, area.x, area.y, area.width, area.height, 0, 0, canvas.width, canvas.height);
+  context.imageSmoothingQuality = "high";
+  context.drawImage(rodada, area.x, area.y, area.width, area.height, 0, 0, canvas.width, canvas.height);
+
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Falha ao gerar a capa")), "image/webp", 0.9);
   });
