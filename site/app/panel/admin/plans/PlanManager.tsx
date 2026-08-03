@@ -964,7 +964,7 @@ function PlanPricing({
   setDays: (value: string) => void;
 }) {
   return (
-    <EditorCard title="Preco" description="Valor, moeda, IVA, desconto, duracao e posicao manual.">
+    <EditorCard title="Preco" description="Valor, duração e posição na página de preços.">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Field label="Preco EUR">
           <input name="price" required defaultValue={plan ? (plan.price_cents / 100).toFixed(2) : "0.00"} inputMode="decimal" className={inputClass} />
@@ -972,16 +972,14 @@ function PlanPricing({
         <Field label="Preco anterior">
           <input name="compareAtPrice" type="number" defaultValue={plan?.compare_at_cents != null ? (plan.compare_at_cents / 100).toFixed(2) : ""} required={discountActive} min="0" step="0.01" inputMode="decimal" placeholder="39.99" className={inputClass} />
         </Field>
+        {/* A moeda e sempre EUR - o createPlan grava-a fixa. Era um select
+            de uma opcao so, que parecia escolha e nao era.
+
+            Saiu daqui um select "IVA" com Incluido / Nao incluido: o plano
+            nao tem campo nenhum de IVA, portanto a escolha nao ia a lado
+            nenhum. */}
         <Field label="Moeda">
-          <select defaultValue="EUR" className={inputClass}>
-            <option>EUR</option>
-          </select>
-        </Field>
-        <Field label="IVA">
-          <select defaultValue="included" className={inputClass}>
-            <option value="included">Incluido</option>
-            <option value="excluded">Nao incluido</option>
-          </select>
+          <div className={`${inputClass} cursor-default text-white/45`}>EUR</div>
         </Field>
       </div>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/15 p-4">
@@ -1136,13 +1134,9 @@ function PlanVisual({
           )}
         </div>
         <div className="space-y-4">
-          <Field label="Icone">
-            <select className={inputClass} defaultValue="orion">
-              <option value="orion">OR branco</option>
-              <option value="crown">Coroa</option>
-              <option value="bolt">Performance</option>
-            </select>
-          </Field>
+          {/* Saiu um select "Icone" com OR branco / Coroa / Performance:
+              o plano nao guarda icone nenhum e o cartao usa sempre a capa.
+              Escolher ali nao mudava nada em lado nenhum. */}
           <Field label="Cor">
             <input type="color" defaultValue="#d6a75b" className="mt-1.5 h-10 w-full rounded-md border border-white/[0.08] bg-[var(--panel-surface-2)] p-1" />
           </Field>
@@ -1226,7 +1220,7 @@ function PlanDiscord({
   setSupportType: (value: string) => void;
 }) {
   return (
-    <EditorCard title="Discord" description="Cargo, remocao automatica, suporte e permissoes.">
+    <EditorCard title="Discord" description="Cargo atribuído no servidor e duração do suporte incluído.">
       {discordError ? (
         <>
           <input type="hidden" name="discordRoleId" value={plan?.discord_role_id ?? ""} />
@@ -1248,21 +1242,26 @@ function PlanDiscord({
           </select>
         </Field>
       )}
+      {/*
+        Saiu daqui um select "Permissoes" com "Licenca + catalogo",
+        "Licenca + suporte" e "Tudo incluido". Nao tinha `name` nenhum,
+        portanto nao gravava nada - mas prometia que escolher "Tudo
+        incluido" incluia suporte. Quem o escolhia ficava a olhar para os
+        "Dias de suporte" bloqueados sem perceber porque: o suporte vem
+        do campo abaixo, e so dele.
+
+        Saiu tambem um select "Remocao automatica". A remocao do cargo
+        quando o plano expira acontece sempre - esta no plan-expiry, com
+        remove_role_id - e nao ha nada para configurar. O select dava a
+        entender que se podia desligar.
+      */}
+      <p className="mt-4 flex items-start gap-2 rounded-xl border border-white/[0.06] bg-black/15 px-3 py-2.5 text-[12px] text-white/40">
+        <Check size={14} className="mt-px shrink-0 text-[var(--good)]" />
+        Quando a licença termina, o cargo é retirado automaticamente no Discord.
+      </p>
+
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <Field label="Remocao automatica">
-          <select className={inputClass} defaultValue="enabled">
-            <option value="enabled">Ativa quando termina</option>
-            <option value="disabled">Manter cargo</option>
-          </select>
-        </Field>
-        <Field label="Permissoes">
-          <select className={inputClass} defaultValue="license">
-            <option value="license">Licenca + catalogo</option>
-            <option value="support">Licenca + suporte</option>
-            <option value="all">Tudo incluido</option>
-          </select>
-        </Field>
-        <Field label="Duracao do suporte">
+        <Field label="Duração do suporte">
           <select name="supportType" value={supportType} onChange={(event) => setSupportType(event.target.value)} className={inputClass}>
             <option value="none">Sem suporte</option>
             <option value="days">Por dias</option>
@@ -1270,9 +1269,24 @@ function PlanDiscord({
           </select>
         </Field>
         <Field label="Dias de suporte">
-          <input name="supportDays" type="number" min="1" required={supportType === "days"} disabled={supportType !== "days"} defaultValue={plan?.support_days && plan.support_days > 0 ? plan.support_days : 30} className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-35`} />
+          <input
+            name="supportDays"
+            type="number"
+            min="1"
+            required={supportType === "days"}
+            disabled={supportType !== "days"}
+            defaultValue={plan?.support_days && plan.support_days > 0 ? plan.support_days : 30}
+            className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-35`}
+          />
         </Field>
       </div>
+      <p className="mt-2 text-[11.5px] text-white/30">
+        {supportType === "none"
+          ? "Este plano não inclui suporte. Escolhe “Por dias” ou “Life-time” para o ativar."
+          : supportType === "lifetime"
+            ? "Suporte sem data de fim, enquanto a licença estiver ativa."
+            : "O suporte conta a partir da compra e termina ao fim dos dias indicados."}
+      </p>
     </EditorCard>
   );
 }
@@ -1289,12 +1303,9 @@ function PlanPromotion({
   return (
     <EditorCard title="Promocoes" description="Cupoes, campanhas, textos e datas de campanha.">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Cupoes">
-          <select className={inputClass} defaultValue="all">
-            <option value="all">Aceitar cupoes ativos</option>
-            <option value="none">Nao permitir cupoes</option>
-          </select>
-        </Field>
+        {/* Saiu um select "Cupoes" com Aceitar / Nao permitir: os cupoes
+            sao geridos globalmente em /panel/admin/coupons e o plano nao
+            tem campo que os limite. A escolha nao era gravada. */}
         <Field label="Texto superior">
           <input name="promoText" defaultValue={plan?.promo_text ?? ""} maxLength={80} placeholder="Promocao limitada" className={inputClass} />
         </Field>
