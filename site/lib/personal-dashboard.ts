@@ -17,8 +17,14 @@ import { money } from "./format.ts";
 export const DIAS_PARA_AVISO = 7;
 
 export type EstadoLicenca = {
-  /** Chave do StatusBadge. So chaves que ja existem no mapa STATUS. */
-  badge: "active" | "pending" | "failed";
+  /**
+   * Chave do StatusBadge.
+   *
+   * Sao chaves de LICENCA e nao de pagamento: usar `failed` para uma
+   * licenca expirada fazia o painel dizer "Falhou", e `pending` para uma
+   * a terminar dizia "Pendente" - as duas palavras erradas.
+   */
+  badge: "active" | "expiring" | "expired" | "suspended";
   /** Texto curto para o mosaico. */
   texto: string;
   /** Null quando e vitalicia ou acesso interno - nao ha contagem. */
@@ -40,7 +46,7 @@ export function estadoDaLicenca(dados: {
   // tenha passado. Vinha antes de tudo o resto.
   if (dados.contaSuspensa) {
     return {
-      badge: "failed",
+      badge: "suspended",
       texto: "Suspensa",
       diasRestantes: null,
       urgente: true,
@@ -72,7 +78,7 @@ export function estadoDaLicenca(dados: {
 
   if (dias <= 0) {
     return {
-      badge: "failed",
+      badge: "expired",
       texto: "Expirada",
       diasRestantes: 0,
       urgente: true,
@@ -82,7 +88,7 @@ export function estadoDaLicenca(dados: {
 
   if (dias <= DIAS_PARA_AVISO) {
     return {
-      badge: "pending",
+      badge: "expiring",
       texto: dias === 1 ? "1 dia" : `${dias} dias`,
       diasRestantes: dias,
       urgente: true,

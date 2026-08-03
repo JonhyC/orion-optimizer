@@ -125,15 +125,29 @@ export function BarList({
   );
 }
 
+/**
+ * Estados possiveis de um badge.
+ *
+ * As cores usam `good`/`warning`/`critical` do tailwind.config e nao
+ * `[var(--good)]/10`: o Tailwind 3 nao consegue aplicar opacidade a um
+ * var() arbitrario, portanto a versao anterior nao gerava regra nenhuma
+ * e TODOS os badges apareciam sem fundo.
+ *
+ * `expired` e `expiring` existem porque uma licenca a acabar nao e um
+ * pagamento: reaproveitar `failed` fazia uma licenca expirada aparecer
+ * como "Falhou", e `pending` fazia uma a terminar aparecer "Pendente".
+ */
 const STATUS: Record<string, { label: string; cls: string }> = {
-  paid: { label: "Pago", cls: "text-[var(--good)] bg-[var(--good)]/10" },
-  pending: { label: "Pendente", cls: "text-[var(--warning)] bg-[var(--warning)]/10" },
-  refunded: { label: "Reembolsado", cls: "text-[var(--serious)] bg-[var(--serious)]/10" },
-  failed: { label: "Falhou", cls: "text-[var(--critical)] bg-[var(--critical)]/10" },
-  active: { label: "Ativa", cls: "text-[var(--good)] bg-[var(--good)]/10" },
-  suspended: { label: "Suspensa", cls: "text-[var(--critical)] bg-[var(--critical)]/10" },
-  open: { label: "Aberto", cls: "text-[var(--warning)] bg-[var(--warning)]/10" },
-  answered: { label: "Respondido", cls: "text-[var(--good)] bg-[var(--good)]/10" },
+  paid: { label: "Pago", cls: "text-good bg-good/10" },
+  pending: { label: "Pendente", cls: "text-warning bg-warning/10" },
+  refunded: { label: "Reembolsado", cls: "text-serious bg-serious/10" },
+  failed: { label: "Falhou", cls: "text-critical bg-critical/10" },
+  active: { label: "Ativa", cls: "text-good bg-good/10" },
+  suspended: { label: "Suspensa", cls: "text-critical bg-critical/10" },
+  expired: { label: "Expirada", cls: "text-critical bg-critical/10" },
+  expiring: { label: "A terminar", cls: "text-warning bg-warning/10" },
+  open: { label: "Aberto", cls: "text-warning bg-warning/10" },
+  answered: { label: "Respondido", cls: "text-good bg-good/10" },
   closed: { label: "Terminado", cls: "text-white/50 bg-white/[0.06]" },
 };
 

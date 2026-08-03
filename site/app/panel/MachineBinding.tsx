@@ -25,7 +25,7 @@ export default function MachineBinding({
         <div>
           <div className="text-[13.5px] font-semibold text-white/70">Pronta para associar</div>
           <p className="mt-1 text-[12.5px] leading-relaxed text-white/35">
-            Inicia sessao no Orion Optimizer 2.0 no computador novo. A licenca fica ligada automaticamente a esse PC.
+            Inicia sessão no Orion Optimizer 2.0 no computador novo. A licença fica ligada automaticamente a esse PC.
           </p>
         </div>
       </div>
@@ -49,7 +49,7 @@ export default function MachineBinding({
           disabled={pending}
           onClick={() => {
             const confirmed = window.confirm(
-              "Trocar de computador? As sessoes abertas no cliente Windows serao terminadas. No proximo login, a licenca fica ligada ao novo PC.",
+              "Trocar de computador? As sessões abertas no cliente Windows serão terminadas. No próximo login, a licença fica ligada ao novo PC.",
             );
             if (!confirmed) return;
             setResult(null);
@@ -67,7 +67,7 @@ export default function MachineBinding({
       </div>
 
       <p className="mt-3 text-[12px] leading-relaxed text-white/30">
-        Esta operacao nao altera o plano, Discord ou password. Por seguranca, so pode ser feita uma vez a cada 24 horas.
+        Esta operação não altera o plano, Discord ou password. Por segurança, só pode ser feita uma vez a cada 24 horas.
       </p>
 
       {result && !result.ok && (

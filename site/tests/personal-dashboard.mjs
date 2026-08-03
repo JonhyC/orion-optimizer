@@ -37,14 +37,14 @@ t("conta o numero de dias certo", licenca({}).diasRestantes === 30, String(licen
 t("vitalicia nao tem contagem", licenca({ expiresAt: null }).diasRestantes === null);
 t("vitalicia diz Life-time", licenca({ expiresAt: null }).texto === "Life-time");
 
-t("expirada NAO diz 'Ativa'", licenca({ expiresAt: dias(-1) }).badge === "failed",
+t("expirada NAO diz 'Ativa'", licenca({ expiresAt: dias(-1) }).badge === "expired",
   "era o bug principal: o badge estava escrito a mao como 'active'");
 t("expirada diz Expirada", licenca({ expiresAt: dias(-1) }).texto === "Expirada");
 t("expirada e urgente", licenca({ expiresAt: dias(-1) }).urgente === true);
 t("expirada nao mostra dias negativos", licenca({ expiresAt: dias(-40) }).diasRestantes === 0,
   String(licenca({ expiresAt: dias(-40) }).diasRestantes));
 
-t("a 3 dias avisa", licenca({ expiresAt: dias(3) }).badge === "pending");
+t("a 3 dias avisa", licenca({ expiresAt: dias(3) }).badge === "expiring");
 t("a 3 dias e urgente", licenca({ expiresAt: dias(3) }).urgente === true);
 t("a 7 dias ainda avisa", licenca({ expiresAt: dias(7) }).urgente === true);
 t("a 8 dias ja nao avisa", licenca({ expiresAt: dias(8) }).urgente === false,
@@ -52,8 +52,26 @@ t("a 8 dias ja nao avisa", licenca({ expiresAt: dias(8) }).urgente === false,
 t("singular a um dia", licenca({ expiresAt: dias(1) }).texto === "1 dia",
   licenca({ expiresAt: dias(1) }).texto);
 
+// O badge vai directo para o StatusBadge, que traduz a chave em palavra.
+// Chaves de pagamento davam frases erradas: uma licenca expirada aparecia
+// como "Falhou" e uma a terminar como "Pendente".
+const BADGES_DE_LICENCA = new Set(["active", "expiring", "expired", "suspended"]);
+t("expirada nao usa badge de pagamento",
+  licenca({ expiresAt: dias(-1) }).badge === "expired",
+  licenca({ expiresAt: dias(-1) }).badge);
+t("a terminar nao usa badge de pagamento",
+  licenca({ expiresAt: dias(3) }).badge === "expiring",
+  licenca({ expiresAt: dias(3) }).badge);
+t("suspensa usa o badge de suspensa",
+  licenca({ contaSuspensa: true }).badge === "suspended");
+t("todos os badges sao de licenca",
+  [licenca({}), licenca({ expiresAt: null }), licenca({ expiresAt: dias(-1) }),
+   licenca({ expiresAt: dias(3) }), licenca({ contaSuspensa: true })]
+    .every((l) => BADGES_DE_LICENCA.has(l.badge)),
+  "nenhum pode ser 'failed' nem 'pending'");
+
 t("suspensa ganha a data valida",
-  licenca({ contaSuspensa: true, expiresAt: dias(300) }).badge === "failed",
+  licenca({ contaSuspensa: true, expiresAt: dias(300) }).badge === "suspended",
   "uma conta suspensa nao tem acesso mesmo com licenca por gastar");
 t("suspensa e urgente", licenca({ contaSuspensa: true }).urgente === true);
 
