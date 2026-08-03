@@ -86,8 +86,9 @@ export default async function PersonalDashboardPage() {
   // Filtra-se em memoria e nao no Firestore de proposito: um `where` por
   // accao alem do `where` por utilizador exigiria um indice composto
   // (user_id, action, created_at) so para esta lista. Buscar 40 e ficar
-  // com 7 sai mais barato do que manter mais um indice.
-  const activity: ActivityRow[] = (await auditForUser(user.id, 40))
+  // com 7 sai mais barato do que manter mais um indice. Sao 20 e nao 40
+  // porque cada documento lido conta para a quota diaria do Firestore.
+  const activity: ActivityRow[] = (await auditForUser(user.id, 20))
     .filter((entrada) => ACCOES_VISIVEIS.has(entrada.action))
     .slice(0, 7)
     .map((entrada) => ({ action: entrada.action, created_at: entrada.created_at }));

@@ -88,7 +88,13 @@ export default function PanelHeader({
         // Sem ruido visual: o badge inicial continua valido.
       }
     };
-    const timer = window.setInterval(refresh, 8000);
+    // 8 segundos com uma cache de 5 do lado do servidor: TODAS as chamadas
+    // falhavam a cache e iam ao Firestore, ~10 800 vezes por dia e por
+    // separador aberto. Agora sao 60, alinhados com a cache, e um separador
+    // escondido nao gasta nada.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, 60_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);

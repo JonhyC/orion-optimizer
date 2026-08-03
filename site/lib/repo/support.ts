@@ -203,11 +203,11 @@ export async function listSupportMessages(ticketId: number): Promise<SupportMess
 export async function countUnreadSupport(user: User): Promise<{ mine: number; staff: number }> {
   const staffRole = ["staff", "developer", "owner"].includes(user.role);
   const [mineSnap, staffSnap] = await Promise.all([
-    cached(`support:unread:user:${user.id}`, 5_000, () =>
+    cached(`support:unread:user:${user.id}`, 60_000, () =>
       ticketsCol().where("user_id", "==", user.id).get()
     ),
     staffRole
-      ? cached("support:unread:staff", 5_000, () =>
+      ? cached("support:unread:staff", 60_000, () =>
           ticketsCol().where("unread_for_staff", "==", 1).count().get()
         )
       : Promise.resolve(null),

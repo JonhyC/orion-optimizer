@@ -32,7 +32,22 @@ import { compareVersions, formatBytes, timeAgo, updateState } from "@/lib/versio
 
 /** Ao fim disto propoe-se o instalador manual: algo correu mal em silencio. */
 const SEGUNDOS_ATE_ALTERNATIVA = 45;
-const SEGUNDOS_ENTRE_VERIFICACOES = 8;
+/**
+ * Intervalo entre verificacoes automaticas do manifesto.
+ *
+ * Estava em 8 segundos. Cada verificacao e um router.refresh(), que
+ * volta a correr a pagina de servidor inteira - sessao, plano, encomendas
+ * e ate 40 registos de auditoria, umas 45 leituras do Firestore. A 8
+ * segundos dava cerca de 486 mil leituras por dia com o painel aberto,
+ * contra as 50 mil que o plano Spark permite: a quota rebentava e o site
+ * respondia "RESOURCE_EXHAUSTED" a toda a gente.
+ *
+ * Dois minutos chega de sobra: o manifesto muda quando alguem publica uma
+ * versao, o que acontece raramente. E o refresh ao ganhar foco e ao voltar
+ * a ficar visivel, mais abaixo, cobre o caso de quem sai e volta - por
+ * isso um intervalo longo nao atrasa nada na pratica.
+ */
+const SEGUNDOS_ENTRE_VERIFICACOES = 120;
 // A 1.1.1 foi distribuida com o atualizador antigo em alguns ambientes.
 // Ate a 1.1.2 estar instalada, usar sempre o setup publicado na Release.
 const VERSAO_COM_FEED_DE_UPDATE = "1.1.2";
@@ -79,7 +94,12 @@ export default function OptimizerActions({
   // mantem o popup sincronizado sem obrigar a recarregar a pagina.
   useEffect(() => {
     if (fase === "a-atualizar") return;
-    const timer = window.setInterval(() => router.refresh(), SEGUNDOS_ENTRE_VERIFICACOES * 1000);
+    // Um separador em segundo plano nao precisa de verificar nada, e era
+    // ai que a maior parte das leituras se perdia: o painel ficava aberto
+    // atras de outras janelas a consumir quota o dia inteiro.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, SEGUNDOS_ENTRE_VERIFICACOES * 1000);
     const aoFocar = () => router.refresh();
     const aoVisivel = () => {
       if (document.visibilityState === "visible") router.refresh();
