@@ -187,7 +187,17 @@ export default function AdminUserProfile({
           {activeTab === "Dispositivos" && <DevicesCard devices={devices} userId={user.id} />}
           {activeTab === "Compras" && <PurchasesCard orders={orders} />}
           {activeTab === "Atividade" && <ActivityTimeline activity={activity} />}
-          {activeTab === "Segurança" && <SecurityCard user={user} loginStats={loginStats} sessions={sessions} />}
+          {activeTab === "Segurança" && (
+            <SecurityCard
+              user={user}
+              loginStats={loginStats}
+              sessions={sessions}
+              /* A auditoria vem por ordem decrescente, portanto o primeiro
+                 registo com IP e o mais recente. Antes esta linha dizia
+                 "Preparado para API" - o IP sempre esteve aqui. */
+              ultimoIp={activity.find((entrada) => entrada.ip)?.ip ?? null}
+            />
+          )}
           {activeTab === "Permissões" && <PermissionsCard user={user} />}
           {activeTab === "Notas" && <NotesCard userId={user.id} />}
           {activeTab === "Administração" && <DangerZone userId={user.id} username={user.username} isSelf={isSelf} />}
@@ -314,7 +324,6 @@ function LicenseCard({ user, plans, licenseLabel, supportLabel }: { user: UserDe
           ["Expiração", !hasLicense(user) ? "sem licença" : user.expires_at === null ? "life-time" : formatDate(user.expires_at)],
           ["Suporte", supportLabel],
           ["Quem atribuiu", user.tier_source === "manual" ? "Administração" : "Discord"],
-          ["Última alteração", "Preparado para API"],
         ]}
       />
       <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
@@ -333,7 +342,11 @@ function LicenseCard({ user, plans, licenseLabel, supportLabel }: { user: UserDe
           <button name="mode" value="set" className="rounded-xl border border-white/10 px-3 text-[12px] font-bold text-white/70">Duração</button>
         </form>
       </div>
-      <ActivityTimeline title="Histórico da licença" activity={[]} empty="Histórico preparado para integração com API." />
+      {/* A auditoria nao distingue accoes de licenca das outras, portanto
+          nao ha historico proprio para mostrar aqui. A seccao existia com
+          uma lista vazia e a legenda "preparado para integracao", que se
+          le como se os dados estivessem para chegar. O historico completo
+          esta na linha do tempo da conta. */}
     </div>
   );
 }
@@ -392,17 +405,29 @@ function ActivityTimeline({ activity, title = "Timeline", empty = "Sem atividade
   );
 }
 
-function SecurityCard({ user, loginStats, sessions }: { user: UserDetail; loginStats: LoginStats; sessions: Sessions }) {
+function SecurityCard({
+  user,
+  loginStats,
+  sessions,
+  ultimoIp,
+}: {
+  user: UserDetail;
+  loginStats: LoginStats;
+  sessions: Sessions;
+  ultimoIp: string | null;
+}) {
   return (
     <div className="space-y-5">
+      {/* "Tokens" saiu por ser o mesmo que "Sessoes" - sao tokens
+          activos, ja contados na linha de cima. "Ultimo navegador" saiu
+          por nao existir: nao guardamos user-agent em lado nenhum. */}
       <InfoGrid rows={[
-        ["Sessões", `${sessions.optimizer ?? 0} optimizer / ${sessions.website ?? 0} site`],
-        ["Tokens", "Preparado para API"],
+        ["Sessões ativas", `${sessions.optimizer ?? 0} optimizer / ${sessions.website ?? 0} site`],
         ["Password Windows", user.password_hash === NO_PASSWORD ? "sem password" : <PasswordReveal key="pw" password={user.client_password} />],
         ["Discord ligado", user.discord_id ? "Sim" : "Não"],
-        ["Último IP", "Preparado para API"],
+        ["Último IP", ultimoIp ?? "sem registo"],
         ["Último dispositivo", user.hwid ?? "nenhum"],
-        ["Último navegador", "Preparado para API"],
+        ["Último login com sucesso", loginStats.last_success ? formatDate(loginStats.last_success) : "sem registo"],
         ["Logins falhados", String(loginStats.failed_total ?? 0)],
       ]} />
       <div className="flex flex-wrap gap-2">

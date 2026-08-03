@@ -1,24 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import {
   Ban,
-  Bell,
   CheckCircle2,
-  ChevronRight,
   Clock3,
   Columns3,
-  Copy,
   Download,
-  Filter,
   HardDrive,
   History,
   KeyRound,
-  Mail,
   MessageSquare,
   Monitor,
   MoreHorizontal,
-  Receipt,
   RefreshCw,
   Search,
   Shield,
@@ -32,79 +27,37 @@ import {
 import CreateUser from "./CreateUser";
 import { resetHwidAction, setUserStatusAction } from "../../actions";
 import { StatusBadge } from "@/components/panel/Pieces";
+import {
+  COLUNAS,
+  FILTROS_INICIAIS,
+  aplicarFiltros,
+  contar,
+  filtrosRapidos,
+  temLicenca,
+  textoDaLicenca,
+  type FiltroRapido,
+  type Filtros,
+} from "@/lib/users-admin";
 import type { UserProfile } from "@/lib/repo/types";
 
 type UserRowData = UserProfile & { discord_avatar_url: string | null };
 type PlanOption = { code: string; name: string };
 
-type FilterKey =
-  | "all"
-  | "active"
-  | "suspended"
-  | "banned"
-  | "no_license"
-  | "lifetime"
-  | "basic"
-  | "pro"
-  | "ultimate"
-  | "special"
-  | "owner"
-  | "developer"
-  | "staff"
-  | "discord"
-  | "machine"
-  | "recent"
-  | "region"
-  | "windows";
-
-type Filters = {
-  quick: FilterKey;
-  plan: string;
-  role: string;
-  status: string;
-  license: string;
-  lastLogin: string;
-  windows: string;
-  region: string;
-  discord: string;
-  sort: string;
+/** Icone por filtro. A lista em si vive em lib/users-admin, para ser testavel. */
+const ICONE_FILTRO: Record<string, ReactNode> = {
+  users: <Users size={15} />,
+  check: <CheckCircle2 size={15} />,
+  ban: <Ban size={15} />,
+  shield: <Shield size={15} />,
+  key: <KeyRound size={15} />,
+  sparkles: <Sparkles size={15} />,
+  badge: <ShieldCheck size={15} />,
+  discord: <MessageSquare size={15} />,
+  monitor: <Monitor size={15} />,
+  clock: <Clock3 size={15} />,
 };
 
-const initialFilters: Filters = {
-  quick: "all",
-  plan: "all",
-  role: "all",
-  status: "all",
-  license: "all",
-  lastLogin: "all",
-  windows: "all",
-  region: "all",
-  discord: "all",
-  sort: "recent",
-};
-
-const quickFilters: Array<{ key: FilterKey; label: string; icon: ReactNode }> = [
-  { key: "all", label: "Todos", icon: <Users size={15} /> },
-  { key: "active", label: "Ativos", icon: <CheckCircle2 size={15} /> },
-  { key: "suspended", label: "Suspensos", icon: <Ban size={15} /> },
-  { key: "banned", label: "Banidos", icon: <Shield size={15} /> },
-  { key: "no_license", label: "Sem licenca", icon: <KeyRound size={15} /> },
-  { key: "lifetime", label: "Life-time", icon: <Sparkles size={15} /> },
-  { key: "basic", label: "Basic", icon: <ShieldCheck size={15} /> },
-  { key: "pro", label: "Pro", icon: <ShieldCheck size={15} /> },
-  { key: "ultimate", label: "Ultimate", icon: <ShieldCheck size={15} /> },
-  { key: "special", label: "Special", icon: <Sparkles size={15} /> },
-  { key: "owner", label: "Owner", icon: <Shield size={15} /> },
-  { key: "developer", label: "Admin", icon: <Shield size={15} /> },
-  { key: "staff", label: "Staff", icon: <Shield size={15} /> },
-  { key: "discord", label: "Discord verificado", icon: <MessageSquare size={15} /> },
-  { key: "machine", label: "Computador associado", icon: <Monitor size={15} /> },
-  { key: "recent", label: "Ultimo login", icon: <Clock3 size={15} /> },
-  { key: "region", label: "Regiao", icon: <Filter size={15} /> },
-  { key: "windows", label: "Windows", icon: <Monitor size={15} /> },
-];
-
-const columns = ["Avatar", "Discord", "Plano", "Cargo", "Hardware", "Windows", "Pais", "Licenca", "Ultimo Login", "Compras"];
+const columns = [...COLUNAS] as string[];
 
 export default function UsersManager({
   users,
@@ -122,52 +75,22 @@ export default function UsersManager({
   actorId: number;
 }) {
   const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<Filters>(initialFilters);
+  const [filters, setFilters] = useState<Filtros>(FILTROS_INICIAIS);
   const [selectedId, setSelectedId] = useState(users[0]?.id ?? 0);
   const [checked, setChecked] = useState<number[]>([]);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(columns);
 
-  const counts = useMemo(() => buildCounts(users, now), [now, users]);
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase("pt");
-    const result = users.filter((user) => {
-      const haystack = [
-        user.username,
-        user.email,
-        user.discord_username,
-        user.discord_id,
-        user.hwid,
-        user.tier,
-        user.role,
-        user.status,
-        user.client_version,
-        licenseText(user, now),
-        "token preparado",
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("pt");
-
-      return (
-        (!needle || haystack.includes(needle)) &&
-        matchesQuick(user, filters.quick, now) &&
-        (filters.plan === "all" || (user.tier ?? "none") === filters.plan) &&
-        (filters.role === "all" || user.role === filters.role) &&
-        (filters.status === "all" || user.status === filters.status) &&
-        (filters.license === "all" || licenseKind(user, now) === filters.license) &&
-        (filters.discord === "all" || (filters.discord === "linked" ? !!user.discord_id : !user.discord_id)) &&
-        (filters.lastLogin === "all" || matchesLastLogin(user, filters.lastLogin, now)) &&
-        filters.windows === "all" &&
-        filters.region === "all"
-      );
-    });
-    return sortUsers(result, filters.sort);
-  }, [filters, now, query, users]);
+  const quickFilters = useMemo(() => filtrosRapidos(plans), [plans]);
+  const counts = useMemo(() => contar(users, quickFilters, now), [now, quickFilters, users]);
+  const filtered = useMemo(
+    () => aplicarFiltros(users, query, filters, now),
+    [filters, now, query, users],
+  );
 
   const selected = filtered.find((user) => user.id === selectedId) ?? filtered[0] ?? null;
 
-  function updateFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
+  function updateFilter<K extends keyof Filtros>(key: K, value: Filtros[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
   }
 
@@ -188,7 +111,7 @@ export default function UsersManager({
         user.role,
         user.tier ?? "",
         user.status,
-        licenseText(user, now),
+        textoDaLicenca(user, now),
         user.hwid ?? "",
         user.client_version ?? "",
       ]
@@ -218,6 +141,7 @@ export default function UsersManager({
         <UsersFilters
           filters={filters}
           counts={counts}
+          quickFilters={quickFilters}
           plans={plans}
           onFilter={updateFilter}
         />
@@ -235,7 +159,7 @@ export default function UsersManager({
             onFilter={updateFilter}
             onReset={() => {
               setQuery("");
-              setFilters(initialFilters);
+              setFilters(FILTROS_INICIAIS);
             }}
           />
 
@@ -287,7 +211,7 @@ function UsersHeader({
         </div>
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-white">Contas</h1>
         <p className="mt-1.5 text-[14px] text-white/40">
-          {total} contas carregadas. Gestao rapida sem abrir varias paginas.
+          {total} contas carregadas. Gestão rápida sem abrir várias páginas.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -316,11 +240,11 @@ function UsersStats({ users, now }: { users: UserRowData[]; now: number }) {
     ["Total de contas", users.length, "perfis"],
     ["Contas ativas", users.filter((u) => u.status === "active").length, "estado ativo"],
     ["Suspensas", users.filter((u) => u.status === "suspended").length, "bloqueadas"],
-    ["Owners", users.filter((u) => u.role === "owner").length, "acesso maximo"],
+    ["Owners", users.filter((u) => u.role === "owner").length, "acesso máximo"],
     ["Admins", users.filter((u) => u.role === "developer").length, "developer"],
     ["Special", users.filter((u) => u.tier === "special").length, "plano premium"],
     ["Ultimate", users.filter((u) => u.tier === "ultimate").length, "plano"],
-    ["Life-time", users.filter((u) => hasLicense(u) && u.expires_at === null).length, "sem expirar"],
+    ["Life-time", users.filter((u) => temLicenca(u) && u.expires_at === null).length, "sem expirar"],
     ["Online agora", users.filter((u) => (u.client_seen_at ?? 0) >= now - 300).length, "5 min"],
     ["Ultimos registos", users.filter((u) => u.created_at >= now - 86400).length, "24 horas"],
   ];
@@ -342,37 +266,39 @@ function UsersFilters({
   filters,
   counts,
   plans,
+  quickFilters,
   onFilter,
 }: {
-  filters: Filters;
-  counts: Record<FilterKey, number>;
+  filters: Filtros;
+  counts: Record<string, number>;
   plans: PlanOption[];
-  onFilter: <K extends keyof Filters>(key: K, value: Filters[K]) => void;
+  quickFilters: FiltroRapido[];
+  onFilter: <K extends keyof Filtros>(key: K, value: Filtros[K]) => void;
 }) {
   return (
     <aside className="rounded-2xl border border-white/[0.07] bg-[var(--panel-surface)] p-3 xl:sticky xl:top-24 xl:h-[calc(100vh-8rem)] xl:overflow-y-auto">
       <div className="px-2 pb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--warning)]">
-        Filtros rapidos
+        Filtros rápidos
       </div>
       <div className="space-y-1">
         {quickFilters.map((item) => (
           <button
-            key={item.key}
-            onClick={() => onFilter("quick", item.key)}
+            key={item.chave}
+            onClick={() => onFilter("quick", item.chave)}
             className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-[13px] transition ${
-              filters.quick === item.key
-                ? "border-[var(--chart-1)]/40 bg-[var(--chart-1)]/10 text-white"
+              filters.quick === item.chave
+                ? "border-neon/40 bg-neon/10 text-white"
                 : "border-transparent text-white/45 hover:border-white/[0.06] hover:bg-white/[0.03] hover:text-white/75"
             }`}
           >
             <span className="flex items-center gap-2.5">
-              <span className={filters.quick === item.key ? "text-[var(--chart-1)]" : "text-white/30"}>
-                {item.icon}
+              <span className={filters.quick === item.chave ? "text-[var(--chart-1)]" : "text-white/30"}>
+                {ICONE_FILTRO[item.icone]}
               </span>
               {item.label}
             </span>
             <span className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/35">
-              {counts[item.key] ?? 0}
+              {counts[item.chave] ?? 0}
             </span>
           </button>
         ))}
@@ -416,13 +342,13 @@ function UsersToolbar({
 }: {
   query: string;
   onQuery: (value: string) => void;
-  filters: Filters;
+  filters: Filtros;
   selectedCount: number;
   columnsOpen: boolean;
   visibleColumns: string[];
   onColumnsOpen: (open: boolean) => void;
   onVisibleColumns: (columns: string[]) => void;
-  onFilter: <K extends keyof Filters>(key: K, value: Filters[K]) => void;
+  onFilter: <K extends keyof Filtros>(key: K, value: Filtros[K]) => void;
   onReset: () => void;
 }) {
   function toggleColumn(column: string) {
@@ -438,7 +364,7 @@ function UsersToolbar({
       <UsersSearch query={query} onQuery={onQuery} />
       <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <SmallSelect value={filters.license} onChange={(v) => onFilter("license", v)}>
-          <option value="all">Licenca: todas</option>
+          <option value="all">Licença: todas</option>
           <option value="active">Ativa</option>
           <option value="expired">Expirada</option>
           <option value="lifetime">Life-time</option>
@@ -596,7 +522,7 @@ function UsersList({
         <span>Plano</span>
         <span>Cargo</span>
         <span>Estado</span>
-        <span>Licenca</span>
+        <span>Licença</span>
         <span />
       </div>
       <div className="space-y-1.5">
@@ -675,8 +601,8 @@ function UserRow({
             {visibleColumns.includes("Hardware") && user.hwid && (
               <code className="font-mono text-[10.5px] text-white/24">{user.hwid.slice(0, 8)}</code>
             )}
-            {visibleColumns.includes("Windows") && (
-              <span className="text-[11px] text-white/22">{user.client_version ?? "sem versao"}</span>
+            {visibleColumns.includes("Cliente") && (
+              <span className="text-[11px] text-white/22">{user.client_version ?? "sem cliente"}</span>
             )}
           </div>
         </div>
@@ -684,7 +610,7 @@ function UserRow({
       <Badge label={user.tier ?? "Sem plano"} tone={tierTone(user.tier)} />
       <Badge label={roleLabel(user.role)} tone={roleTone(user.role)} />
       <StatusBadge status={user.status} />
-      <span className="text-[12px] tabular-nums text-white/45">{licenseText(user, now)}</span>
+      <span className="text-[12px] tabular-nums text-white/45">{textoDaLicenca(user, now)}</span>
       <UserQuickActions user={user} canEdit={canEdit} canSuspend={canSuspend} />
     </article>
   );
@@ -705,8 +631,8 @@ function UserQuickActions({
       <button
         onClick={() => setOpen(!open)}
         className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.08] text-white/45 transition hover:border-[var(--chart-1)] hover:text-white"
-        title="Acoes rapidas"
-        aria-label="Acoes rapidas"
+        title="Ações rápidas"
+        aria-label="Ações rápidas"
       >
         <MoreHorizontal size={14} />
       </button>
@@ -725,7 +651,6 @@ function UserQuickActions({
               <MenuButton icon={<Ban size={13} />} label={user.status === "active" ? "Suspender" : "Reativar"} danger={user.status === "active"} />
             </form>
           )}
-          <MenuButton icon={<MessageSquare size={13} />} label="Mensagem" />
         </div>
       )}
     </div>
@@ -781,10 +706,10 @@ function UserSidePanel({
               </div>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <QuickButton icon={<SlidersHorizontal size={13} />} label="Editar" />
-            <QuickButton icon={<KeyRound size={13} />} label="Plano" />
-            <QuickButton icon={<Receipt size={13} />} label="Licenca" />
+          {/* So ficam accoes que existem mesmo. "Editar", "Plano",
+              "Licenca", "Banir" e "Mensagem" eram botoes sem nada por
+              tras - clicava-se e nao acontecia rigorosamente nada. */}
+          <div className="mt-4 grid grid-cols-2 gap-2">
             {canEdit && canSuspend ? (
               <form action={setUserStatusAction}>
                 <input type="hidden" name="userId" value={user.id} />
@@ -794,8 +719,15 @@ function UserSidePanel({
             ) : (
               <QuickButton icon={<Ban size={13} />} label="Suspender" disabled />
             )}
-            <QuickButton icon={<Shield size={13} />} label="Banir" disabled />
-            <QuickButton icon={<MessageSquare size={13} />} label="Mensagem" />
+            {canEdit && (
+              <Link
+                href={`/panel/admin/users/${user.id}`}
+                className="flex h-8 items-center justify-center gap-1.5 rounded-lg border border-neon/30 bg-neon/[0.07] px-2 text-[11.5px] font-semibold text-[var(--chart-1)] transition-colors hover:bg-neon/[0.14]"
+              >
+                <SlidersHorizontal size={13} />
+                Abrir conta
+              </Link>
+            )}
           </div>
         </div>
 
@@ -803,8 +735,8 @@ function UserSidePanel({
           <UserSummary user={user} now={now} />
           <UserLicense user={user} plans={plans} now={now} canManage={canManage} />
           <UserDevices user={user} />
-          <UserSecurity user={user} />
-          <UserPurchases />
+          <UserSecurity user={user} canManage={canManage} />
+
           <UserTimeline user={user} />
           <UserNotes userId={user.id} />
           <Permissions user={user} />
@@ -819,7 +751,7 @@ function UserSummary({ user, now }: { user: UserRowData; now: number }) {
   const rows = [
     ["Dias ativo", `${days}`],
     ["Compras", "0"],
-    ["Tickets", "API futura"],
+    
     ["Dispositivos", user.hwid ? "1" : "0"],
     ["Sessoes", user.client_seen_at ? "1" : "0"],
     ["Ultimo login", user.client_seen_at ? formatDate(user.client_seen_at) : "sem registo"],
@@ -839,23 +771,29 @@ function UserLicense({
   canManage: boolean;
 }) {
   return (
-    <PanelSection title="Licenca" icon={<KeyRound size={14} />}>
+    <PanelSection title="Licença" icon={<KeyRound size={14} />}>
       <InfoRows
         rows={[
           ["Plano", user.tier ?? "Sem plano"],
-          ["Tipo", hasLicense(user) && user.expires_at === null ? "Life-time" : "Por dias"],
-          ["Estado", licenseText(user, now)],
-          ["Expiracao", !hasLicense(user) ? "sem licenca" : user.expires_at === null ? "life-time" : formatDate(user.expires_at)],
-          ["Data criacao", formatDate(user.created_at)],
-          ["Quem atribuiu", user.tier_source === "manual" ? "Administracao" : "Discord"],
-          ["Ultima alteracao", "Preparado para API"],
+          ["Tipo", temLicenca(user) && user.expires_at === null ? "Life-time" : "Por dias"],
+          ["Estado", textoDaLicenca(user, now)],
+          ["Expiração", !temLicenca(user) ? "sem licença" : user.expires_at === null ? "life-time" : formatDate(user.expires_at)],
+          ["Data de criação", formatDate(user.created_at)],
+          ["Quem atribuiu", user.tier_source === "manual" ? "Administração" : "Discord"],
         ]}
       />
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <QuickButton icon={<SlidersHorizontal size={13} />} label="Editar" disabled={!canManage || !plans.length} />
-        <QuickButton icon={<RefreshCw size={13} />} label="Renovar" disabled={!canManage} />
-        <QuickButton icon={<X size={13} />} label="Revogar" danger disabled={!canManage} />
-      </div>
+      {/* Editar, renovar e revogar sao feitos na pagina da conta, que e
+          quem tem as accoes a serio. Os botoes que estavam aqui nao
+          faziam nada - pareciam funcionais e nao eram. */}
+      {canManage && (
+        <Link
+          href={`/panel/admin/users/${user.id}`}
+          className="mt-3 flex items-center justify-center gap-2 rounded-lg border border-neon/30 bg-neon/[0.07] px-3 py-2 text-[12.5px] font-semibold text-[var(--chart-1)] transition-colors hover:bg-neon/[0.14]"
+        >
+          <SlidersHorizontal size={13} />
+          Gerir esta conta
+        </Link>
+      )}
     </PanelSection>
   );
 }
@@ -875,19 +813,17 @@ function UserDevices({ user }: { user: UserRowData }) {
           <InfoRows
             compact
             rows={[
-              ["Windows", "Preparado para API"],
-              ["Versao Orion", user.client_version ?? "sem versao"],
-              ["Ultima ligacao", user.client_seen_at ? formatDate(user.client_seen_at) : "sem registo"],
-              ["Estado", user.client_seen_at ? "Ligado" : "Sem heartbeat"],
+              ["Versão Orion", user.client_version ?? "sem versão"],
+              ["Última ligação", user.client_seen_at ? formatDate(user.client_seen_at) : "sem registo"],
             ]}
           />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <QuickButton icon={<Monitor size={13} />} label="Ver" />
+          {/* So o reset e uma accao real. "Ver" e "Remover" nao tinham
+              nada por tras. */}
+          <div className="mt-3">
             <form action={resetHwidAction}>
               <input type="hidden" name="userId" value={user.id} />
               <QuickButton icon={<RefreshCw size={13} />} label="Reset Hardware" />
             </form>
-            <QuickButton icon={<X size={13} />} label="Remover" danger />
           </div>
         </div>
       ) : (
@@ -897,33 +833,29 @@ function UserDevices({ user }: { user: UserRowData }) {
   );
 }
 
-function UserSecurity({ user }: { user: UserRowData }) {
+function UserSecurity({ user, canManage }: { user: UserRowData; canManage: boolean }) {
   return (
-    <PanelSection title="Seguranca" icon={<Shield size={14} />}>
+    <PanelSection title="Segurança" icon={<Shield size={14} />}>
+      {/* O IP, o navegador e a contagem de tokens nao existem nesta
+          listagem - so a pagina da conta os vai buscar. Antes apareciam
+          aqui como "Preparado para API", que se le como se fosse um
+          valor. */}
       <InfoRows
         rows={[
-          ["Discord", user.discord_id ? user.discord_id : "nao ligado"],
-          ["Password Windows", "guardada em colecao privada"],
-          ["Tokens", "ativos via API futura"],
-          ["Sessoes", user.client_seen_at ? "Optimizer recente" : "sem sessao recente"],
-          ["Ultimo IP", "Preparado para API"],
-          ["Ultimo navegador", "Preparado para API"],
-          ["Ultimo dispositivo", user.hwid ?? "nenhum"],
+          ["Discord", user.discord_id ?? "não ligado"],
+          ["Computador", user.hwid ?? "nenhum"],
+          ["Último acesso", user.client_seen_at ? formatDate(user.client_seen_at) : "sem registo"],
         ]}
       />
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <QuickButton icon={<X size={13} />} label="Terminar" />
-        <QuickButton icon={<KeyRound size={13} />} label="Reset Pass" />
-        <QuickButton icon={<RefreshCw size={13} />} label="Reset Token" />
-      </div>
-    </PanelSection>
-  );
-}
-
-function UserPurchases() {
-  return (
-    <PanelSection title="Compras" icon={<Receipt size={14} />}>
-      <EmptyLine text="Historico preparado para plano, preco, metodo, estado, data e fatura." />
+      {canManage && (
+        <Link
+          href={`/panel/admin/users/${user.id}`}
+          className="mt-3 flex items-center justify-center gap-2 rounded-lg border border-white/[0.08] px-3 py-2 text-[12.5px] font-semibold text-white/55 transition-colors hover:border-neon/35 hover:text-white"
+        >
+          <KeyRound size={13} />
+          Sessões, tokens e password
+        </Link>
+      )}
     </PanelSection>
   );
 }
@@ -1127,85 +1059,6 @@ function Badge({ label, tone = "neutral" }: { label: string; tone?: string }) {
 
 function EmptyLine({ text }: { text: string }) {
   return <p className="rounded-xl border border-dashed border-white/[0.08] px-3 py-5 text-center text-[12px] text-white/32">{text}</p>;
-}
-
-function buildCounts(users: UserRowData[], now: number): Record<FilterKey, number> {
-  return {
-    all: users.length,
-    active: users.filter((u) => u.status === "active").length,
-    suspended: users.filter((u) => u.status === "suspended").length,
-    banned: users.filter((u) => u.status === "banned").length,
-    no_license: users.filter((u) => !hasLicense(u)).length,
-    lifetime: users.filter((u) => hasLicense(u) && u.expires_at === null).length,
-    basic: users.filter((u) => u.tier === "basic").length,
-    pro: users.filter((u) => u.tier === "pro").length,
-    ultimate: users.filter((u) => u.tier === "ultimate").length,
-    special: users.filter((u) => u.tier === "special").length,
-    owner: users.filter((u) => u.role === "owner").length,
-    developer: users.filter((u) => u.role === "developer").length,
-    staff: users.filter((u) => u.role === "staff").length,
-    discord: users.filter((u) => u.discord_id).length,
-    machine: users.filter((u) => u.hwid).length,
-    recent: users.filter((u) => (u.client_seen_at ?? 0) >= now - 86400 * 7).length,
-    region: 0,
-    windows: users.filter((u) => u.client_version).length,
-  };
-}
-
-function matchesQuick(user: UserRowData, quick: FilterKey, now: number) {
-  if (quick === "all") return true;
-  if (quick === "active") return user.status === "active";
-  if (quick === "suspended") return user.status === "suspended";
-  if (quick === "banned") return user.status === "banned";
-  if (quick === "no_license") return !hasLicense(user);
-  if (quick === "lifetime") return hasLicense(user) && user.expires_at === null;
-  if (["basic", "pro", "ultimate", "special"].includes(quick)) return user.tier === quick;
-  if (quick === "owner") return user.role === "owner";
-  if (quick === "developer") return user.role === "developer";
-  if (quick === "staff") return user.role === "staff";
-  if (quick === "discord") return !!user.discord_id;
-  if (quick === "machine") return !!user.hwid;
-  if (quick === "recent") return (user.client_seen_at ?? 0) >= now - 86400 * 7;
-  if (quick === "windows") return !!user.client_version;
-  if (quick === "region") return false;
-  return true;
-}
-
-function matchesLastLogin(user: UserRowData, value: string, now: number) {
-  const seen = user.client_seen_at ?? 0;
-  if (value === "online") return seen >= now - 300;
-  if (value === "24h") return seen >= now - 86400;
-  if (value === "7d") return seen >= now - 86400 * 7;
-  if (value === "never") return !seen;
-  return true;
-}
-
-function sortUsers(users: UserRowData[], sort: string) {
-  const copy = [...users];
-  if (sort === "name") return copy.sort((a, b) => a.username.localeCompare(b.username, "pt"));
-  if (sort === "old") return copy.sort((a, b) => a.created_at - b.created_at);
-  if (sort === "login") return copy.sort((a, b) => (b.client_seen_at ?? 0) - (a.client_seen_at ?? 0));
-  if (sort === "plan") return copy.sort((a, b) => (a.tier ?? "zz").localeCompare(b.tier ?? "zz", "pt"));
-  return copy.sort((a, b) => b.created_at - a.created_at);
-}
-
-function hasLicense(user: UserRowData) {
-  return user.tier !== null || user.expires_at !== null;
-}
-
-function licenseKind(user: UserRowData, now: number) {
-  if (!hasLicense(user)) return "none";
-  if (user.expires_at === null) return "lifetime";
-  if (user.expires_at > now) return "active";
-  return "expired";
-}
-
-function licenseText(user: UserRowData, now: number) {
-  const kind = licenseKind(user, now);
-  if (kind === "none") return "sem licenca";
-  if (kind === "lifetime") return "life-time";
-  if (kind === "active" && user.expires_at) return `${Math.ceil((user.expires_at - now) / 86400)} dias`;
-  return "expirada";
 }
 
 function tierTone(tier: string | null) {
