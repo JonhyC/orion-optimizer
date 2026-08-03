@@ -7,6 +7,8 @@ import { allPlans } from "@/lib/repo/plans";
 import { findById } from "@/lib/repo/users";
 import { auditForUser, loginStatsFor } from "@/lib/repo/audit";
 import { countActiveByUser } from "@/lib/repo/tokens";
+import { listSupportTicketsForUser } from "@/lib/repo/support";
+import { findAdminNote } from "@/lib/repo/users";
 import { avatarUrl } from "@/lib/discord";
 import AdminUserProfile from "./AdminUserProfile";
 
@@ -25,14 +27,16 @@ export default async function UserDetailPage({
 
   const now = Math.floor(Date.now() / 1000);
 
-  // As cinco leituras sao independentes umas das outras. Encadea-las somava
-  // cinco idas ao Firestore (~93ms cada) ao tempo de abertura da pagina.
-  const [plans, orders, loginStats, sessions, registos] = await Promise.all([
+  // As seis leituras sao independentes umas das outras. Encadea-las somava
+  // seis idas ao Firestore (~93ms cada) ao tempo de abertura da pagina.
+  const [plans, orders, loginStats, sessions, registos, tickets, adminNote] = await Promise.all([
     allPlans(),
     ordersForUser(user.id),
     loginStatsFor(user.username),
     countActiveByUser(user.id),
     auditForUser(user.id, 20),
+    listSupportTicketsForUser(user.id),
+    findAdminNote(user.id),
   ]);
 
   // A auditoria no Firestore usa ids automaticos e o componente precisa de
@@ -61,12 +65,14 @@ export default async function UserDetailPage({
           user={{
             ...user,
             discord_avatar_url: user.discord_id ? avatarUrl(user.discord_id, user.discord_avatar) : null,
+            admin_note: adminNote,
           }}
           plans={plans}
           orders={orders}
           activity={activity}
           loginStats={loginStats}
           sessions={sessions}
+          tickets={tickets.length}
           isSelf={actor.id === user.id}
           now={now}
         />

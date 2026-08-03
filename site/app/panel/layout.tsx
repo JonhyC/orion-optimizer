@@ -28,7 +28,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
         />
       )}
 
-      <main className="mx-auto max-w-[1180px] px-6 py-10">{children}</main>
+      <main className="orion-container py-8 lg:py-10">{children}</main>
     </div>
   );
 }

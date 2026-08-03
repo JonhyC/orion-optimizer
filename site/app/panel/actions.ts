@@ -52,6 +52,7 @@ import {
   findProfileByUsername,
   setCredentials,
   updateProfile,
+  setAdminNote,
 } from "@/lib/repo/users";
 
 /**
@@ -913,4 +914,28 @@ export async function setCouponActiveAction(formData: FormData) {
   await updateCoupon(couponId, { active });
   audit(actor.id, active ? "coupon_activated" : "coupon_disabled", `#${couponId}`);
   revalidatePath("/panel/admin/coupons");
+}
+
+/**
+ * Nota interna sobre uma conta.
+ *
+ * Antes ficava em localStorage: cada administrador via a sua propria
+ * nota sobre o mesmo cliente, e limpar o browser apagava-a. Nunca existiu
+ * para mais ninguem. Agora vai para o perfil, como qualquer outro campo.
+ *
+ * O limite de 2000 caracteres e para nao deixar um campo livre crescer
+ * sem travao dentro de um documento que e lido em quase todas as paginas.
+ */
+export async function setAdminNoteAction(formData: FormData) {
+  const actor = await requireRole("owner");
+  const userId = Number(formData.get("userId"));
+  if (!Number.isFinite(userId)) return;
+
+  const texto = String(formData.get("note") ?? "").trim().slice(0, 2000);
+  await setAdminNote(userId, texto || null);
+
+  // A nota em si nao vai para a auditoria: e texto livre sobre uma pessoa
+  // e o registo so precisa de saber que foi alterada, por quem e quando.
+  audit(actor.id, texto ? "admin_note_saved" : "admin_note_cleared", `user #${userId}`);
+  revalidatePath(`/panel/admin/users/${userId}`);
 }

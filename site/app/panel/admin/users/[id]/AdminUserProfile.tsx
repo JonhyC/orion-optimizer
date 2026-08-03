@@ -15,7 +15,7 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
-import { assignPlanAction, setLicenseAction, updateUserAction } from "../../../actions";
+import { setAdminNoteAction, assignPlanAction, setLicenseAction, updateUserAction } from "../../../actions";
 import { StatusBadge } from "@/components/panel/Pieces";
 import DangerZone from "./DangerZone";
 import PasswordReveal from "./PasswordReveal";
@@ -43,6 +43,7 @@ type UserDetail = {
   client_seen_at: number | null;
   password_hash: string;
   client_password: string | null;
+  admin_note: string | null;
 };
 
 type PlanOption = {
@@ -109,6 +110,7 @@ export default function AdminUserProfile({
   activity,
   loginStats,
   sessions,
+  tickets,
   isSelf,
   now,
 }: {
@@ -118,6 +120,14 @@ export default function AdminUserProfile({
   activity: ActivityRow[];
   loginStats: LoginStats;
   sessions: Sessions;
+  /**
+   * Numero real de tickets desta conta.
+   *
+   * Era contado a procurar "support" ou "ticket" no texto das accoes de
+   * auditoria - e nenhuma accao registada contem essas palavras, por isso
+   * o cartao mostrava sempre 0.
+   */
+  tickets: number;
   isSelf: boolean;
   now: number;
 }) {
@@ -133,7 +143,6 @@ export default function AdminUserProfile({
   const supportLabel = supportText(user, now);
   const accountAge = Math.max(0, Math.ceil((now - user.created_at) / 86400));
   const devices = makeDevices(user);
-  const tickets = activity.filter((entry) => entry.action.includes("support") || entry.action.includes("ticket")).length;
 
   return (
     <div className="space-y-5">
@@ -199,7 +208,7 @@ export default function AdminUserProfile({
             />
           )}
           {activeTab === "Permissões" && <PermissionsCard user={user} />}
-          {activeTab === "Notas" && <NotesCard userId={user.id} />}
+          {activeTab === "Notas" && <NotesCard userId={user.id} note={user.admin_note} />}
           {activeTab === "Administração" && <DangerZone userId={user.id} username={user.username} isSelf={isSelf} />}
         </div>
       </section>
@@ -361,7 +370,7 @@ function DevicesCard({ devices, userId }: { devices: ReturnType<typeof makeDevic
             <div><h3 className="font-semibold text-white">{device.name}</h3><p className="mt-1 font-mono text-[11px] text-white/35">{device.hwid}</p></div>
             <CopyButton value={device.hwid} label="Copiar Hardware ID" />
           </div>
-          <InfoGrid compact rows={[["Windows", device.windows], ["Versão Orion", device.version], ["Última ligação", device.lastSeen], ["Estado", device.status]]} />
+          <InfoGrid compact rows={[["Versão Orion", device.version], ["Última ligação", device.lastSeen], ["Estado", device.status]]} />
           <div className="mt-4 flex flex-wrap gap-2">
             <form action={updateUserAction}>
               <input type="hidden" name="userId" value={userId} />
@@ -439,46 +448,88 @@ function SecurityCard({
   );
 }
 
+/**
+ * O que este cargo permite. Leitura, nao controlo.
+ *
+ * A versao anterior parecia um painel de interruptores - eram <label>
+ * com um quadrado desenhado, sem input nenhum por tras, portanto clicar
+ * nao fazia nada. Havia ainda um "Beta" que nunca podia ficar activo e
+ * uma caixa a dizer "Permissoes adicionais preparadas para API".
+ *
+ * As permissoes derivam do cargo e do plano; muda-se o cargo no separador
+ * Perfil e o plano no separador Licenca. Aqui so se mostra o resultado.
+ */
 function PermissionsCard({ user }: { user: UserDetail }) {
-  const permissions = ["Owner", "Admin", "Staff", "Support", "Beta", "Special"];
-  const active = new Set([
-    user.role === "owner" ? "Owner" : "",
-    user.role === "developer" ? "Admin" : "",
-    user.role === "staff" ? "Staff" : "",
-    ["staff", "developer", "owner"].includes(user.role) ? "Support" : "",
-    user.tier === "special" ? "Special" : "",
-  ].filter(Boolean));
+  const interno = ["staff", "developer", "owner"].includes(user.role);
+  const permissoes: Array<[string, boolean, string]> = [
+    ["Acesso ao painel", interno, "ver a área de administração"],
+    ["Gerir contas", user.role === "owner", "criar, suspender e apagar"],
+    ["Gerir catálogo", ["developer", "owner"].includes(user.role), "otimizações e compatibilidade"],
+    ["Responder a suporte", interno, "tickets dos clientes"],
+    ["Cliente Windows", interno || user.tier !== null, "descarregar e usar o Optimizer"],
+    ["Otimizações Special", user.tier === "special", "exclusivas do plano Special"],
+  ];
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {permissions.map((permission) => (
-        <label key={permission} className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 text-[13px] font-semibold text-white/70">
-          {permission}
-          <span className={`grid h-6 w-6 place-items-center rounded-md border ${active.has(permission) ? "border-[var(--good)]/30 bg-[var(--good)]/10 text-[var(--good)]" : "border-white/10 text-white/25"}`}>
-            {active.has(permission) && <Check size={14} />}
-          </span>
-        </label>
-      ))}
-      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 text-[12px] text-white/35">Permissões adicionais preparadas para API.</div>
+    <div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {permissoes.map(([nome, activa, detalhe]) => (
+          <div
+            key={nome}
+            className="flex items-start justify-between gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] font-semibold text-white/70">{nome}</span>
+              <span className="mt-0.5 block text-[11.5px] text-white/32">{detalhe}</span>
+            </span>
+            <span
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border ${
+                activa ? "border-good/30 bg-good/10 text-good" : "border-white/10 text-white/25"
+              }`}
+              title={activa ? "Permitido" : "Não permitido"}
+            >
+              {activa ? <Check size={14} /> : "—"}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[12px] text-white/30">
+        Derivadas do cargo e do plano. O cargo altera-se no separador Perfil, o plano no separador Licença.
+      </p>
     </div>
   );
 }
 
-function NotesCard({ userId }: { userId: number }) {
-  const key = `orion-admin-note-${userId}`;
-  const [note, setNote] = useState(() => (typeof window === "undefined" ? "" : localStorage.getItem(key) ?? ""));
+/**
+ * Nota interna sobre a conta.
+ *
+ * Guardava em localStorage: a nota existia so no browser de quem a
+ * escreveu, os outros administradores viam o campo vazio, e limpar o
+ * browser apagava-a. Agora e um campo do perfil como qualquer outro.
+ */
+function NotesCard({ userId, note }: { userId: number; note: string | null }) {
   return (
-    <div>
+    <form action={setAdminNoteAction}>
+      <input type="hidden" name="userId" value={userId} />
       <textarea
-        value={note}
-        onChange={(event) => {
-          setNote(event.target.value);
-          localStorage.setItem(key, event.target.value);
-        }}
-        placeholder="Cliente VIP. Necessitou suporte. Tem acesso Beta."
+        name="note"
+        defaultValue={note ?? ""}
+        maxLength={2000}
+        placeholder="Notas visíveis para toda a administração."
         className="min-h-[180px] w-full resize-y rounded-2xl border border-white/[0.08] bg-[var(--panel-surface-2)] p-4 text-[14px] leading-relaxed text-white outline-none transition-colors placeholder:text-white/20 focus:border-[var(--chart-1)]"
       />
-      <p className="mt-3 text-[12px] text-white/30">Notas privadas preparadas para sincronizar com a API. Neste momento ficam guardadas localmente no browser.</p>
-    </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[12px] text-white/30">
+          Guardada na conta e visível para toda a administração. Máximo 2000 caracteres.
+        </p>
+        <button
+          type="submit"
+          className="rounded-xl bg-[var(--chart-1)] px-4 py-2 text-[12px] font-bold text-[#120c05] transition-transform duration-200 hover:scale-[1.03]"
+        >
+          Guardar nota
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -544,7 +595,7 @@ function makeDevices(user: UserDetail) {
   return [{
     name: "PC principal",
     hwid: user.hwid,
-    windows: "Windows",
+
     version: user.client_version ?? "sem versão",
     lastSeen: user.client_seen_at ? formatDate(user.client_seen_at) : "sem ligação",
     status: user.client_seen_at ? "Ativo" : "Pendente",

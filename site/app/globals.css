@@ -32,6 +32,26 @@
   }
 
   /**
+   * Largura do painel.
+   *
+   * Estava fixa em 1180px: num ecra de 1920 o conteudo ocupava 62% e o
+   * resto era margem preta, enquanto a tabela de contas ficava com
+   * scroll horizontal por falta de espaco.
+   *
+   * Agora ocupa a largura toda e e o ESPACAMENTO que se adapta - o
+   * clamp faz o respiro crescer com o ecra e encolher no telemovel, sem
+   * precisar de breakpoints. O tecto existe so para o texto nao ficar
+   * com linhas absurdas em ecras ultra-largos; a 1920 ja nao chega a
+   * limitar nada.
+   */
+  .orion-container {
+    width: 100%;
+    max-width: 2100px;
+    margin-inline: auto;
+    padding-inline: clamp(0.875rem, 2.5vw, 2.75rem);
+  }
+
+  /**
    * Barra do painel.
    *
    * O fundo, o blur, a sombra e a altura sao transicoes CSS e nao

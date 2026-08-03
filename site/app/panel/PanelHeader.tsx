@@ -137,7 +137,7 @@ export default function PanelHeader({
           }}
         />
 
-        <div className="orion-navbar-inner mx-auto flex max-w-[1180px] min-w-0 items-center px-6">
+        <div className="orion-navbar-inner orion-container flex min-w-0 items-center">
           {/* ------------------------------------------------------ logo */}
           <Link
             href="/panel"

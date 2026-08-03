@@ -60,6 +60,32 @@ function normalizar(dados: Partial<UserProfile>, id: number): UserProfile {
   };
 }
 
+/**
+ * Nota interna da administracao sobre uma conta.
+ *
+ * Vive na subcoleccao `private` e NAO no documento do perfil. As regras
+ * do Firestore deixam cada utilizador ler o seu proprio /users/{id}, o
+ * que tornaria uma nota interna sobre o cliente legivel pelo proprio
+ * cliente. A `private` esta negada a toda a gente (`allow read: if
+ * false`) e so o Admin SDK do servidor lhe chega.
+ *
+ * Antes disto a nota era guardada em localStorage: existia so no browser
+ * de quem a escreveu e desaparecia ao limpar o browser.
+ */
+function notesRef(id: number) {
+  return col().doc(String(id)).collection(CREDENTIALS_PATH.collection).doc("notes");
+}
+
+export async function findAdminNote(id: number): Promise<string | null> {
+  const snap = await notesRef(id).get();
+  if (!snap.exists) return null;
+  return (snap.data()?.text as string | undefined) ?? null;
+}
+
+export async function setAdminNote(id: number, texto: string | null): Promise<void> {
+  await notesRef(id).set({ text: texto, updated_at: AGORA() });
+}
+
 // ------------------------------------------------------------------ leitura
 
 export async function findProfileById(id: number): Promise<UserProfile | null> {
@@ -196,6 +222,9 @@ export async function deleteUser(id: number): Promise<void> {
   // filhos sobrevivem ao pai apagado e ficariam orfaos para sempre.
   const lote = firestore().batch();
   lote.delete(credsRef(id));
+  // A nota tambem: apagar so o perfil deixava-a orfa na subcoleccao, e o
+  // proximo utilizador a receber este id herdava-a.
+  lote.delete(notesRef(id));
   lote.delete(col().doc(String(id)));
   await lote.commit();
 }
