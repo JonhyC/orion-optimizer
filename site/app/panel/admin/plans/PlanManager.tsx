@@ -1260,33 +1260,57 @@ function PlanDiscord({
         Quando a licença termina, o cargo é retirado automaticamente no Discord.
       </p>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <Field label="Duração do suporte">
-          <select name="supportType" value={supportType} onChange={(event) => setSupportType(event.target.value)} className={inputClass}>
-            <option value="none">Sem suporte</option>
-            <option value="days">Por dias</option>
-            <option value="lifetime">Life-time</option>
-          </select>
-        </Field>
-        <Field label="Dias de suporte">
-          <input
-            name="supportDays"
-            type="number"
-            min="1"
-            required={supportType === "days"}
-            disabled={supportType !== "days"}
-            defaultValue={plan?.support_days && plan.support_days > 0 ? plan.support_days : 30}
-            className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-35`}
-          />
-        </Field>
+      {/*
+        Botoes em vez de um <select>.
+        O campo dos dias estava sempre visivel e desactivado quando o
+        suporte era "Sem suporte" - um campo cinzento que nao aceita
+        cliques le-se como avariado, nao como "escolhe outra opcao
+        primeiro". Agora a escolha e explicita e o campo dos dias so
+        aparece quando ha dias para escrever.
+      */}
+      <input type="hidden" name="supportType" value={supportType} />
+
+      <div className="mt-4">
+        <span className="block text-[12px] font-medium text-white/50">Suporte incluído</span>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          {([
+            ["none", "Sem suporte", "O plano não inclui suporte"],
+            ["days", "Por dias", "Termina ao fim de N dias"],
+            ["lifetime", "Life-time", "Enquanto a licença durar"],
+          ] as const).map(([valor, titulo, texto]) => (
+            <button
+              key={valor}
+              type="button"
+              onClick={() => setSupportType(valor)}
+              aria-pressed={supportType === valor}
+              className={`rounded-xl border p-3 text-left transition-colors ${
+                supportType === valor
+                  ? "border-neon/45 bg-neon/10"
+                  : "border-white/[0.07] bg-black/15 hover:border-white/20"
+              }`}
+            >
+              <span className="block text-[12.5px] font-semibold text-white">{titulo}</span>
+              <span className="mt-0.5 block text-[11px] text-white/32">{texto}</span>
+            </button>
+          ))}
+        </div>
       </div>
-      <p className="mt-2 text-[11.5px] text-white/30">
-        {supportType === "none"
-          ? "Este plano não inclui suporte. Escolhe “Por dias” ou “Life-time” para o ativar."
-          : supportType === "lifetime"
-            ? "Suporte sem data de fim, enquanto a licença estiver ativa."
-            : "O suporte conta a partir da compra e termina ao fim dos dias indicados."}
-      </p>
+
+      {supportType === "days" && (
+        <div className="mt-4 max-w-[220px]">
+          <Field label="Dias de suporte">
+            <input
+              name="supportDays"
+              type="number"
+              min="1"
+              required
+              autoFocus
+              defaultValue={plan?.support_days && plan.support_days > 0 ? plan.support_days : 30}
+              className={inputClass}
+            />
+          </Field>
+        </div>
+      )}
     </EditorCard>
   );
 }
