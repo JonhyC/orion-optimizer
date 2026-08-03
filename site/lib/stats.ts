@@ -1,5 +1,6 @@
 import { nowSeconds } from "./db.ts";
 import { cached } from "./cache.ts";
+import { dateTime, isoDate, money } from "./format.ts";
 import { listAllOrders, listOrdersForUser, listRecentOrders } from "./repo/orders.ts";
 import { allPlans } from "./repo/plans.ts";
 import { countUsers, listProfiles } from "./repo/users.ts";
@@ -197,32 +198,15 @@ export async function ordersForUser(userId: number): Promise<OrderRow[]> {
 
 // ------------------------------------------------------------------ formato
 
-export function money(cents: number, currency = "EUR"): string {
-  return new Intl.NumberFormat("pt-PT", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(cents / 100);
-}
-
-export function isoDate(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
+// Os formatadores mudaram-se para lib/format.ts, que nao importa nada.
+// Ficam reexportados aqui para todo o codigo de servidor que ja os importava
+// deste modulo continuar a funcionar sem alteracoes. Codigo de CLIENTE tem
+// de os importar de lib/format directamente - ver o comentario la.
+export { money, isoDate, dateTime };
 
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 function shortLabel(iso: string): string {
   const [, m, d] = iso.split("-");
   return `${Number(d)} ${MONTHS[Number(m) - 1]}`;
-}
-
-export function dateTime(ts: number): string {
-  return new Date(ts * 1000).toLocaleString("pt-PT", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }

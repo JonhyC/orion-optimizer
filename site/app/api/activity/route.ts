@@ -1,5 +1,7 @@
 import { bearerToken, clientIp, userFromToken } from "@/lib/auth";
-import { audit, getDb, nowSeconds } from "@/lib/db";
+import { nowSeconds } from "@/lib/db";
+import { audit } from "@/lib/repo/audit";
+import { updateProfile } from "@/lib/repo/users";
 import { body, fail, ok, str } from "../_lib/respond";
 
 export const runtime = "nodejs";
@@ -23,6 +25,12 @@ export async function POST(req: Request) {
   }
 
   audit(user.id, action, detail || null, clientIp(req));
-  getDb().prepare("UPDATE users SET client_seen_at = ? WHERE id = ?").run(nowSeconds(), user.id);
+
+  // O `client_seen_at` e o que alimenta a "ultima sessao" no painel do
+  // cliente e a contagem de quem esta online no painel do administrador.
+  // Ia para o SQLite, que na Vercel vive em /tmp e desaparece a cada
+  // arranque: os dois numeros nunca podiam estar certos.
+  await updateProfile(user.id, { client_seen_at: nowSeconds() });
+
   return ok({ recorded: true });
 }

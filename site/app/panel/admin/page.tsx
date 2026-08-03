@@ -7,8 +7,6 @@ import {
   Boxes,
   Database,
   Download,
-  Gauge,
-  Globe2,
   KeyRound,
   LifeBuoy,
   MessageSquare,
@@ -31,7 +29,8 @@ import { listCoupons } from "@/lib/repo/coupons";
 import { listAllSupportTickets } from "@/lib/repo/support";
 import { listProfiles } from "@/lib/repo/users";
 import { dailySeries, dateTime, money, recentOrders, revenueByPlan, summary } from "@/lib/stats";
-import AreaChart from "@/components/panel/AreaChart";
+import { derivarAlertas, estadoDosServicos, type EstadoServico } from "@/lib/admin-dashboard";
+import RevenueChart from "./RevenueChart";
 import { BarList, Card, StatusBadge, TableView } from "@/components/panel/Pieces";
 import { TIER_LABELS } from "@/lib/optimizer-access";
 
@@ -43,19 +42,26 @@ export default async function AdminPage() {
   const now = nowSeconds();
   const discordBotReady = Boolean(discordConfig()?.botToken);
 
-  const [s, revenue30, revenue7, signups, ordersSeries, plans, orders, profiles, tickets, coupons] =
+  // Cronometrar a leitura serve o painel: e a unica medicao honesta de
+  // saude da base de dados que esta pagina consegue fazer sobre si propria.
+  const inicioLeitura = Date.now();
+
+  // 90 dias em vez de 30: o seletor de periodo do grafico corta esta serie
+  // em memoria, portanto tem de vir com o periodo mais longo que oferece.
+  const [s, revenueSerie, signups, ordersSerie, plans, orders, profiles, tickets, coupons] =
     await Promise.all([
       summary(),
-      dailySeries("revenue", 30),
-      dailySeries("revenue", 7),
+      dailySeries("revenue", 90),
       dailySeries("signups", 30),
-      dailySeries("orders", 30),
+      dailySeries("orders", 90),
       revenueByPlan(),
       recentOrders(8),
       listProfiles(12),
       listAllSupportTickets(8),
       listCoupons(),
     ]);
+
+  const leituraMs = Date.now() - inicioLeitura;
 
   const cat = catalogStats();
   const release = optimizerRelease();
@@ -68,25 +74,37 @@ export default async function AdminPage() {
   const onlineOptimizer = profiles.filter((profile) => (profile.client_seen_at ?? 0) >= now - 300).length;
   const pendingOrders = s.ordersByStatus.pending ?? 0;
 
-  const alerts = [
-    unreadTickets.length > 0 ? `${unreadTickets.length} ticket${unreadTickets.length === 1 ? "" : "s"} por responder` : null,
-    pendingOrders > 0 ? `${pendingOrders} compra${pendingOrders === 1 ? "" : "s"} pendente${pendingOrders === 1 ? "" : "s"}` : null,
-    !discordBotReady ? "Discord Bot sem token configurado" : null,
-    cat.conflicts > 0 ? `${cat.conflicts} conflito${cat.conflicts === 1 ? "" : "s"} no catalogo` : null,
-    cat.suspended > 0 ? `${cat.suspended} tweak${cat.suspended === 1 ? "" : "s"} suspenso${cat.suspended === 1 ? "" : "s"}` : null,
-    `Versao publicada ${release.version}`,
-  ].filter(Boolean) as string[];
+  // A versao anterior punha "Versao publicada X" no meio dos problemas. E
+  // informacao util, mas nao um alerta - e misturada com eles faz com que
+  // nenhum se destaque. Agora os alertas sao so o que precisa de accao, por
+  // ordem de gravidade e com o link para onde se resolve.
+  const alertas = derivarAlertas({
+    ticketsPorLer: unreadTickets.length,
+    comprasPendentes: pendingOrders,
+    discordBotPronto: discordBotReady,
+    conflitosCatalogo: cat.conflicts,
+    tweaksSuspensos: cat.suspended,
+    contasSuspensas: suspendedClients.length,
+  });
+  const alerts = alertas.map((a) => a.texto);
 
-  const services = [
-    ["Website", "online", "42 ms", "agora", <Globe2 key="website" size={15} />],
-    ["API", "online", "58 ms", "agora", <Server key="api" size={15} />],
-    ["Discord", discordBotReady ? "online" : "manutencao", discordBotReady ? "91 ms" : "token", "sessao", <MessageSquare key="discord" size={15} />],
-    ["Downloads", "online", "34 ms", `v${release.version}`, <Download key="downloads" size={15} />],
-    ["Autenticacao", "online", "63 ms", "OAuth/API", <ShieldCheck key="auth" size={15} />],
-    ["Base de Dados", "online", "74 ms", "Firestore", <Database key="db" size={15} />],
-    ["Cache", "online", "8 ms", "8s TTL", <Gauge key="cache" size={15} />],
-    ["Servidor", "online", "local", "Next.js", <Activity key="server" size={15} />],
-  ] as const;
+  // Estado dos servicos SO com factos.
+  //
+  // A versao anterior listava oito servicos com latencias escritas a mao no
+  // codigo - 42 ms, 58 ms, 91 ms, 74 ms - que nunca foram medidas. Um
+  // painel que inventa numeros de saude e pior do que um painel sem eles:
+  // quando algo abrandar a serio, continuara a dizer 58 ms.
+  //
+  // Ficam quatro linhas, cada uma verificavel: a base de dados leva o
+  // tempo REAL desta leitura, e as restantes dizem se estao configuradas.
+  const servicos = estadoDosServicos({
+    firestoreMs: leituraMs,
+    discordBotPronto: discordBotReady,
+    pagamentosConfigurados: Boolean(
+      process.env.STRIPE_SECRET_KEY || process.env.PAYPAL_CLIENT_ID,
+    ),
+    versaoPublicada: release.version,
+  });
 
   const realtime = [
     orders[0] ? ["Agora", "Compra recente", `${orders[0].username} - ${orders[0].plan_name}`] : null,
@@ -120,17 +138,20 @@ export default async function AdminPage() {
       <DashboardQuickActions canSeeMoney={canSeeMoney} />
 
       <div className="mt-6 grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <DashboardServices services={services} />
+        <DashboardServices servicos={servicos} />
         <DashboardAlerts alerts={alerts} />
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <DashboardRevenue
-          canSeeMoney={canSeeMoney}
-          revenue30={revenue30}
-          revenue7={revenue7}
-          ordersSeries={ordersSeries}
-        />
+        <Card
+          title={canSeeMoney ? "Receita" : "Atividade de compras"}
+          subtitle="Escolhe o período no gráfico"
+        >
+          <RevenueChart
+            serie={canSeeMoney ? revenueSerie : ordersSerie}
+            dinheiro={canSeeMoney}
+          />
+        </Card>
         <DashboardRealtime rows={realtime} />
       </div>
 
@@ -159,12 +180,9 @@ export default async function AdminPage() {
           updates={release.version ? 1 : 0}
         />
         <DashboardPerformance
-          api="58 ms"
-          cpu="Preparado"
-          ram="Preparado"
-          cache="Ativa"
-          requests={ordersSeries.reduce((sum, point) => sum + point.value, 0)}
-          uptime="Online"
+          leituraMs={leituraMs}
+          uptimeSegundos={Math.floor(process.uptime())}
+          comprasNoPeriodo={ordersSerie.reduce((soma, ponto) => soma + ponto.value, 0)}
           onlineOptimizer={onlineOptimizer}
         />
         <DashboardActivity alerts={alerts} />
@@ -309,27 +327,29 @@ function DashboardQuickActions({ canSeeMoney }: { canSeeMoney: boolean }) {
   );
 }
 
-function DashboardServices({
-  services,
-}: {
-  services: ReadonlyArray<readonly [string, string, string, string, React.ReactNode]>;
-}) {
+const ICONE_SERVICO: Record<string, React.ReactNode> = {
+  "Base de dados": <Database size={15} />,
+  Discord: <MessageSquare size={15} />,
+  Pagamentos: <Ticket size={15} />,
+  "Aplicação": <Download size={15} />,
+};
+
+function DashboardServices({ servicos }: { servicos: EstadoServico[] }) {
   return (
-    <Card title="Estado dos servicos" subtitle="Saude operacional e ultima verificacao">
+    <Card title="Estado dos serviços" subtitle="Apenas o que é verificável">
       <div className="grid gap-2 md:grid-cols-2">
-        {services.map(([name, status, latency, checked, icon]) => (
-          <div key={name} className="rounded-xl border border-white/[0.06] bg-white/[0.018] p-3">
+        {servicos.map((s) => (
+          <div key={s.nome} className="rounded-xl border border-white/[0.06] bg-white/[0.018] p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2">
-                <span className="text-[var(--chart-1)]">{icon}</span>
-                <span className="text-[13px] font-semibold text-white">{name}</span>
+                <span className="text-[var(--chart-1)]">{ICONE_SERVICO[s.nome] ?? <Server size={15} />}</span>
+                <span className="text-[13px] font-semibold text-white">{s.nome}</span>
               </div>
-              <ServiceBadge status={status} />
+              <ServiceBadge
+                status={s.estado === "ok" ? "online" : s.estado === "atencao" ? "manutencao" : "offline"}
+              />
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-[11.5px] text-white/35">
-              <span>Resposta: <strong className="text-white/60">{latency}</strong></span>
-              <span>Check: <strong className="text-white/60">{checked}</strong></span>
-            </div>
+            <p className="mt-3 text-[11.5px] text-white/45">{s.detalhe}</p>
           </div>
         ))}
       </div>
@@ -356,48 +376,6 @@ function DashboardAlerts({ alerts }: { alerts: string[] }) {
   );
 }
 
-function DashboardRevenue({
-  canSeeMoney,
-  revenue30,
-  revenue7,
-  ordersSeries,
-}: {
-  canSeeMoney: boolean;
-  revenue30: Awaited<ReturnType<typeof dailySeries>>;
-  revenue7: Awaited<ReturnType<typeof dailySeries>>;
-  ordersSeries: Awaited<ReturnType<typeof dailySeries>>;
-}) {
-  return (
-    <Card
-      title={canSeeMoney ? "Receita" : "Atividade de compras"}
-      subtitle="Hoje, 7 dias, 30 dias e 12 meses preparados para alternancia"
-    >
-      <div id="analytics" className="mb-4 flex flex-wrap gap-2">
-        {["Hoje", "7 dias", "30 dias", "12 meses"].map((period) => (
-          <span key={period} className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
-            period === "30 dias"
-              ? "border-[var(--chart-1)]/35 bg-[var(--chart-1)]/10 text-[var(--chart-1)]"
-              : "border-white/[0.08] text-white/38"
-          }`}>
-            {period}
-          </span>
-        ))}
-      </div>
-      <AreaChart
-        points={canSeeMoney ? revenue30 : ordersSeries}
-        format={canSeeMoney ? "money" : "number"}
-        emptyLabel={canSeeMoney ? "Ainda nao ha receita registada." : "Ainda nao ha compras registadas."}
-      />
-      <TableView
-        headers={[canSeeMoney ? "Dia" : "Dia", canSeeMoney ? "Receita" : "Compras"]}
-        rows={(canSeeMoney ? revenue7 : ordersSeries.slice(-7))
-          .filter((p) => p.value > 0)
-          .map((p) => [p.label, canSeeMoney ? money(p.value) : p.value])}
-        summary="Ver ultimos 7 dias em tabela"
-      />
-    </Card>
-  );
-}
 
 function DashboardRealtime({ rows }: { rows: string[][] }) {
   return (
@@ -588,33 +566,41 @@ function DashboardPending({
   );
 }
 
+/**
+ * Desempenho, so com o que o servidor consegue medir sobre si proprio.
+ *
+ * Saiu daqui o CPU e a RAM, que mostravam a palavra "Preparado" - nao ha
+ * telemetria de maquina nenhuma a chegar, e um painel com dois campos a
+ * dizer "Preparado" nao informa, so ocupa espaco.
+ *
+ * O que fica e medido: o tempo desta leitura, ha quanto tempo o processo
+ * esta de pe, e quem esteve visto no Optimizer nos ultimos cinco minutos.
+ */
 function DashboardPerformance({
-  api,
-  cpu,
-  ram,
-  cache,
-  requests,
-  uptime,
+  leituraMs,
+  uptimeSegundos,
+  comprasNoPeriodo,
   onlineOptimizer,
 }: {
-  api: string;
-  cpu: string;
-  ram: string;
-  cache: string;
-  requests: number;
-  uptime: string;
+  leituraMs: number;
+  uptimeSegundos: number;
+  comprasNoPeriodo: number;
   onlineOptimizer: number;
 }) {
+  const uptime =
+    uptimeSegundos < 3600
+      ? `${Math.floor(uptimeSegundos / 60)} min`
+      : uptimeSegundos < 86400
+        ? `${Math.floor(uptimeSegundos / 3600)} h`
+        : `${Math.floor(uptimeSegundos / 86400)} dias`;
+
   return (
-    <Card title="Performance" subtitle="Estado interno preparado para telemetria">
+    <Card title="Desempenho" subtitle="Medido neste pedido">
       <div className="space-y-2">
         {[
-          ["Tempo resposta API", api],
-          ["CPU", cpu],
-          ["RAM", ram],
-          ["Cache", cache],
-          ["Requests", String(requests)],
-          ["Uptime", uptime],
+          ["Leitura dos dados", `${leituraMs} ms`],
+          ["Servidor de pé há", uptime],
+          ["Compras no período", String(comprasNoPeriodo)],
           ["Online no Optimizer", String(onlineOptimizer)],
         ].map(([label, value]) => (
           <div key={label} className="flex justify-between border-b border-white/[0.05] pb-2 text-[12.5px] last:border-b-0">

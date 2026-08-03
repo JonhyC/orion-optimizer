@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { Card, StatTile, StatusBadge } from "@/components/panel/Pieces";
 import { DISCORD_URL } from "@/lib/data";
-import { getDb, nowSeconds, NO_PASSWORD } from "@/lib/db";
+import { nowSeconds, NO_PASSWORD } from "@/lib/db";
+import { auditForUser } from "@/lib/repo/audit";
 import { processExpiredPlans } from "@/lib/plan-expiry";
 import { requireUser, roleAtLeast } from "@/lib/session";
 import { dateTime, money, ordersForUser } from "@/lib/stats";
@@ -42,6 +43,19 @@ type PersonalPlan = {
 
 type ActivityRow = { action: string; created_at: number };
 
+/** Accoes que valem a pena mostrar ao cliente. As restantes sao ruido interno. */
+const ACTIVITY_ACTIONS = new Set([
+  "login_ok",
+  "login_discord_verified",
+  "catalog_served",
+  "hwid_bound",
+  "client_password_generated",
+  "panel_login_ok",
+  "logout",
+  "discord_plan_roles_synced",
+  "self_hwid_reset",
+]);
+
 const ACTIVITY_LABEL: Record<string, string> = {
   login_ok: "Sessao iniciada no Orion Optimizer 2.0",
   login_discord_verified: "Cargos Discord verificados",
@@ -66,7 +80,6 @@ export default async function PersonalDashboardPage() {
 
   if (!activePlan && !internalAccess) redirect("/panel");
 
-  const db = getDb();
   const plan = user.tier
     ? ((await findPlanByCode(user.tier)) as PersonalPlan | null) ?? undefined
     : undefined;
@@ -78,14 +91,14 @@ export default async function PersonalDashboardPage() {
   const orders = await ordersForUser(user.id);
   const paidOrders = orders.filter((order) => order.status === "paid");
   const totalSpent = paidOrders.reduce((sum, order) => sum + order.amount_cents, 0);
-  const activity = db.prepare(
-    `SELECT action, created_at FROM audit_log
-     WHERE user_id = ? AND action IN
-       ('login_ok', 'login_discord_verified', 'catalog_served', 'hwid_bound',
-        'client_password_generated', 'panel_login_ok', 'logout', 'discord_plan_roles_synced',
-        'self_hwid_reset')
-     ORDER BY created_at DESC LIMIT 7`,
-  ).all(user.id) as ActivityRow[];
+  // Filtra-se em memoria e nao no Firestore de proposito: um `where` por
+  // accao alem do `where` por utilizador exigiria um indice composto
+  // (user_id, action, created_at) so para esta lista. Buscar 40 e ficar
+  // com 7 sai mais barato do que manter mais um indice.
+  const activity: ActivityRow[] = (await auditForUser(user.id, 40))
+    .filter((entrada) => ACTIVITY_ACTIONS.has(entrada.action))
+    .slice(0, 7)
+    .map((entrada) => ({ action: entrada.action, created_at: entrada.created_at }));
 
   const licenseText = internalAccess && !user.tier
     ? "Acesso interno"
