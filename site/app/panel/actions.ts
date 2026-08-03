@@ -525,6 +525,51 @@ function planPublicContent(formData: FormData) {
   };
 }
 
+/**
+ * Diz o que esta mal num formulario de plano, em portugues.
+ *
+ * As accoes de plano tinham onze condicoes de validacao a desaguar todas
+ * num `return;` mudo: o formulario fechava-se, o plano ficava na mesma e
+ * nao aparecia nada no ecra. Era impossivel perceber porque e que uma
+ * publicacao nao acontecia.
+ *
+ * Devolve null quando esta tudo bem.
+ */
+function validarPlano(dados: {
+  code: string;
+  name: string;
+  priceEuros: number;
+  marketingValido: boolean;
+  conteudoValido: boolean;
+  days: number;
+  supportDays: number | null;
+  discordRoleId: string | null | undefined;
+  sortOrder: number;
+}): string | null {
+  if (!dados.name) return "O nome do plano não pode ficar vazio.";
+  if (!/^[a-z0-9._-]{2,32}$/.test(dados.code)) {
+    return "O código só aceita letras minúsculas, números, ponto, hífen e underscore, entre 2 e 32 caracteres.";
+  }
+  if (!Number.isFinite(dados.priceEuros) || dados.priceEuros < 0) {
+    return "O preço tem de ser um número igual ou maior que zero.";
+  }
+  if (!dados.marketingValido) {
+    return "Promoção ativa: o preço anterior tem de existir e ser superior ao preço final.";
+  }
+  if (!dados.conteudoValido) {
+    return "Faltam os benefícios do plano ou o texto do botão. Ambos são obrigatórios para o plano aparecer no site.";
+  }
+  if (!Number.isFinite(dados.days) || dados.days < 0) {
+    return "A duração tem de ser um número de dias igual ou maior que zero (0 = Life-time).";
+  }
+  if (dados.supportDays !== null && (!Number.isFinite(dados.supportDays) || dados.supportDays < 0)) {
+    return "Os dias de suporte têm de ser um número igual ou maior que zero.";
+  }
+  if (dados.discordRoleId === undefined) return "O cargo do Discord escolhido não é válido.";
+  if (!Number.isFinite(dados.sortOrder)) return "A ordem tem de ser um número.";
+  return null;
+}
+
 async function isAssignableDiscordRole(roleId: string): Promise<boolean> {
   try {
     return (await fetchDiscordGuildRoles()).some(
@@ -574,7 +619,12 @@ async function removePlanCoverFile(coverUrl: string | null): Promise<void> {
   }
 }
 
-export async function updatePlanAction(formData: FormData) {
+export type ResultadoPlano = { ok?: boolean; error?: string };
+
+export async function updatePlanAction(
+  _anterior: ResultadoPlano | null,
+  formData: FormData,
+): Promise<ResultadoPlano> {
   const actor = await requireRole("owner");
   const planId = Number(formData.get("planId"));
 
@@ -588,35 +638,38 @@ export async function updatePlanAction(formData: FormData) {
   const days = planDays(formData);
   const supportDays = planSupportDays(formData);
   const discordRoleId = planDiscordRoleId(formData);
-  const active = formData.get("active") === "1" ? 1 : 0;
+  // O botao "Guardar e publicar" manda `publishNow`; o estado escolhido
+  // no separador Publicacao manda `active`. Sao campos diferentes de
+  // proposito: quando os dois se chamavam `active`, o formData ficava com
+  // dois valores e quem ganhava dependia da ordem no DOM.
+  const active = formData.get("publishNow") === "1" || formData.get("active") === "1" ? 1 : 0;
   const sortOrder = Number(formData.get("sortOrder") ?? 0);
 
-  if (
-    !/^[a-z0-9._-]{2,32}$/.test(code) ||
-    !name ||
-    !Number.isFinite(priceEuros) ||
-    priceEuros < 0 ||
-    !marketing.valid ||
-    !publicContent.valid ||
-    !Number.isFinite(days) ||
-    days < 0 ||
-    (supportDays !== null && (!Number.isFinite(supportDays) || supportDays < 0)) ||
-    discordRoleId === undefined ||
-    !Number.isFinite(sortOrder)
-  ) {
-    return;
-  }
+  const erro = validarPlano({
+    code, name, priceEuros,
+    marketingValido: marketing.valid,
+    conteudoValido: publicContent.valid,
+    days, supportDays, discordRoleId, sortOrder,
+  });
+  if (erro) return { error: erro };
 
   const current = await findPlanById(planId);
-  if (!current) return;
+  if (!current) return { error: "Este plano já não existe." };
 
   if (discordRoleId) {
     const duplicate = (await allPlans()).find(
       (plan) => plan.discord_role_id === discordRoleId && plan.id !== planId,
     );
-    if (duplicate) return;
+    if (duplicate) {
+      return { error: `O cargo do Discord escolhido já está atribuído ao plano "${duplicate.name}".` };
+    }
     if (discordRoleId !== current.discord_role_id) {
-      if (!(await isAssignableDiscordRole(discordRoleId))) return;
+      if (!(await isAssignableDiscordRole(discordRoleId))) {
+        return {
+          error:
+            "O bot não consegue atribuir esse cargo do Discord. Verifica se o cargo do bot está acima dele na hierarquia do servidor.",
+        };
+      }
     }
   }
 
@@ -662,9 +715,13 @@ export async function updatePlanAction(formData: FormData) {
 
   revalidatePath("/panel/admin/plans");
   revalidatePath("/");
+  return { ok: true };
 }
 
-export async function createPlanAction(formData: FormData) {
+export async function createPlanAction(
+  _anterior: ResultadoPlano | null,
+  formData: FormData,
+): Promise<ResultadoPlano> {
   const actor = await requireRole("owner");
   const code = String(formData.get("code") ?? "").trim().toLowerCase();
   const name = String(formData.get("name") ?? "").trim();
@@ -676,30 +733,31 @@ export async function createPlanAction(formData: FormData) {
   const days = planDays(formData);
   const supportDays = planSupportDays(formData);
   const discordRoleId = planDiscordRoleId(formData);
-  const active = formData.get("active") === "1" ? 1 : 0;
+  const active = formData.get("publishNow") === "1" || formData.get("active") === "1" ? 1 : 0;
   const sortOrder = Number(formData.get("sortOrder") ?? 0);
 
-  if (
-    !/^[a-z0-9._-]{2,32}$/.test(code) ||
-    !name ||
-    !Number.isFinite(priceEuros) ||
-    priceEuros < 0 ||
-    !marketing.valid ||
-    !publicContent.valid ||
-    !Number.isFinite(days) ||
-    days < 0 ||
-    (supportDays !== null && (!Number.isFinite(supportDays) || supportDays < 0)) ||
-    discordRoleId === undefined ||
-    !Number.isFinite(sortOrder)
-  ) {
-    return;
-  }
+  const erro = validarPlano({
+    code, name, priceEuros,
+    marketingValido: marketing.valid,
+    conteudoValido: publicContent.valid,
+    days, supportDays, discordRoleId, sortOrder,
+  });
+  if (erro) return { error: erro };
 
-  if (discordRoleId && (await allPlans()).some((plan) => plan.discord_role_id === discordRoleId)) {
-    return;
-  }
+  const existente = (await allPlans()).find((plan) => plan.code === code);
+  if (existente) return { error: `Já existe um plano com o código "${code}".` };
+
   if (discordRoleId) {
-    if (!(await isAssignableDiscordRole(discordRoleId))) return;
+    const duplicado = (await allPlans()).find((plan) => plan.discord_role_id === discordRoleId);
+    if (duplicado) {
+      return { error: `O cargo do Discord escolhido já está atribuído ao plano "${duplicado.name}".` };
+    }
+    if (!(await isAssignableDiscordRole(discordRoleId))) {
+      return {
+        error:
+          "O bot não consegue atribuir esse cargo do Discord. Verifica se o cargo do bot está acima dele na hierarquia do servidor.",
+      };
+    }
   }
   const coverUrl = (await savePlanCover(formData)) ?? null;
 
@@ -727,6 +785,7 @@ export async function createPlanAction(formData: FormData) {
   audit(actor.id, "plan_created", code);
   revalidatePath("/panel/admin/plans");
   revalidatePath("/");
+  return { ok: true };
 }
 
 export async function deletePlanAction(formData: FormData) {

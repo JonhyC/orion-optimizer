@@ -738,7 +738,7 @@ function UserSidePanel({
           <UserSecurity user={user} canManage={canManage} />
 
           <UserTimeline user={user} />
-          <UserNotes userId={user.id} />
+          <UserNotes userId={user.id} canManage={canManage} />
           <Permissions user={user} />
         </div>
       </div>
@@ -881,23 +881,29 @@ function UserTimeline({ user }: { user: UserRowData }) {
   );
 }
 
-function UserNotes({ userId }: { userId: number }) {
-  const key = `orion-users-note-${userId}`;
-  const [value, setValue] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return localStorage.getItem(key) ?? "";
-  });
+/**
+ * Notas internas.
+ *
+ * Havia aqui uma caixa de texto que escrevia em localStorage com a chave
+ * `orion-users-note-{id}` - e a pagina da conta tinha OUTRA, com a chave
+ * `orion-admin-note-{id}`. O mesmo cliente tinha duas notas diferentes,
+ * em dois sitios do painel, nenhuma visivel para mais ninguem e ambas
+ * perdidas ao limpar o browser.
+ *
+ * A nota a serio vive no Firestore e le-se na pagina da conta. Aqui nao
+ * se carrega: seriam mais 500 leituras so para preencher uma lista.
+ */
+function UserNotes({ userId, canManage }: { userId: number; canManage: boolean }) {
+  if (!canManage) return null;
   return (
     <PanelSection title="Notas internas" icon={<MessageSquare size={14} />}>
-      <textarea
-        value={value}
-        onChange={(event) => {
-          setValue(event.target.value);
-          localStorage.setItem(key, event.target.value);
-        }}
-        placeholder="Cliente VIP, acesso Beta, suporte especial..."
-        className="min-h-24 w-full resize-none rounded-xl border border-white/[0.08] bg-[var(--panel-surface-2)] p-3 text-[12.5px] text-white outline-none placeholder:text-white/25 focus:border-[var(--chart-1)]"
-      />
+      <Link
+        href={`/panel/admin/users/${userId}`}
+        className="flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] px-3 py-2.5 text-[12.5px] font-semibold text-white/55 transition-colors hover:border-neon/35 hover:text-white"
+      >
+        <MessageSquare size={13} />
+        Ver e editar na conta
+      </Link>
     </PanelSection>
   );
 }

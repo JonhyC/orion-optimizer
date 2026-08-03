@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Cropper, { type Area } from "react-easy-crop";
 import {
+  AlertTriangle,
   Archive,
   Check,
   CheckCircle2,
@@ -14,7 +15,6 @@ import {
   Eye,
   FileClock,
   Filter,
-  Gift,
   Globe2,
   GripVertical,
   Headphones,
@@ -43,6 +43,7 @@ import {
   deletePlanAction,
   reorderPlansAction,
   updatePlanAction,
+  type ResultadoPlano,
 } from "../../actions";
 
 export type AdminPlan = {
@@ -89,7 +90,6 @@ type FilterKey =
   | "public"
   | "private"
   | "draft"
-  | "archived"
   | "promo"
   | "no_promo"
   | "lifetime"
@@ -319,7 +319,7 @@ function PlansHeader({
       <div className="flex flex-wrap items-center gap-2">
         <HeaderButton onClick={onCreate} icon={<Plus size={15} />} label="Novo Plano" primary />
         <HeaderButton onClick={onDuplicate} icon={<Copy size={15} />} label="Duplicar Plano" />
-        <HeaderButton icon={<Gift size={15} />} label="Gerir Promocoes" />
+
         <HeaderButton icon={<Download size={15} />} label="Exportar" />
         <HeaderButton onClick={() => location.reload()} icon={<RefreshCw size={15} />} label="Atualizar" />
       </div>
@@ -334,7 +334,7 @@ function PlansStats({ plans, metrics }: { plans: AdminPlan[]; metrics: PlanMetri
     ["Total de planos", plans.length, "catalogo comercial"],
     ["Publicos", plans.filter((plan) => plan.active === 1).length, "visiveis no site"],
     ["Privados", plans.filter((plan) => plan.active !== 1).length, "ocultos do site"],
-    ["Rascunhos", plans.filter((plan) => !plan.cover_url || !parsePlanFeatures(plan.features_json).length).length, "incompletos"],
+    ["Incompletos", plans.filter((plan) => !plan.cover_url || !parsePlanFeatures(plan.features_json).length).length, "incompletos"],
     ["Receita total", money(revenue, "EUR"), "por planos"],
     ["Clientes ativos", clients, "com plano"],
   ];
@@ -383,8 +383,7 @@ function PlansToolbar({
             ["all", "Todos"],
             ["public", "Publicos"],
             ["private", "Privados"],
-            ["draft", "Rascunhos"],
-            ["archived", "Arquivados"],
+            ["draft", "Incompletos"],
             ["promo", "Promocao ativa"],
             ["no_promo", "Sem promocao"],
             ["lifetime", "Life-time"],
@@ -603,7 +602,10 @@ function PlanEditor({
   roleUsage: Record<string, string>;
   onSubmitted: () => void;
 }) {
-  const action = mode === "create" ? createPlanAction : updatePlanAction;
+  const [estado, action, aGuardar] = useActionState(
+    mode === "create" ? createPlanAction : updatePlanAction,
+    null as ResultadoPlano | null,
+  );
   const [section, setSection] = useState<EditorSection>("info");
   const [durationType, setDurationType] = useState(plan?.days === 0 ? "lifetime" : "days");
   const [supportType, setSupportType] = useState(
@@ -621,7 +623,15 @@ function PlanEditor({
   const [features, setFeatures] = useState(() => parsePlanFeatures(plan?.features_json ?? null));
   const [previewTab, setPreviewTab] = useState<"website" | "discord" | "checkout" | "client">("website");
   const [preview, setPreview] = useState<PlanCardData>(() => planToPreview(plan, coverPreview, features));
-  const [autosave, setAutosave] = useState("Guardado");
+  /**
+   * Ha alteracoes por guardar.
+   *
+   * Substitui um indicador que dizia "A guardar..." e depois "Guardado
+   * local" - vindos de um setTimeout que nao guardava absolutamente nada,
+   * nem no servidor nem no browser. Quem fechasse o editor a confiar
+   * nessa mensagem perdia o trabalho todo.
+   */
+  const [porGuardar, setPorGuardar] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -631,16 +641,18 @@ function PlanEditor({
     setPreview(buildPlanPreview(new FormData(form), coverPreview, features));
   }, [badgeActive, badgeText, coverPreview, discountActive, durationType, features, supportType, section]);
 
+  // So fecha quando o servidor confirma. Antes fechava no `onSubmit`, ou
+  // seja antes de saber o resultado: um erro de validacao fazia o editor
+  // desaparecer com o plano por gravar e nada no ecra a explicar.
   useEffect(() => {
-    setAutosave("Guardado local");
-  }, []);
+    if (estado?.ok) onSubmitted();
+  }, [estado, onSubmitted]);
 
   function updateLocalPreview() {
     const form = formRef.current;
     if (!form) return;
     setPreview(buildPlanPreview(new FormData(form), coverPreview, features));
-    setAutosave("A guardar...");
-    window.setTimeout(() => setAutosave("Guardado local"), 350);
+    setPorGuardar(true);
   }
 
   function addFeature() {
@@ -663,19 +675,9 @@ function PlanEditor({
       action={action}
       onInput={updateLocalPreview}
       onChange={updateLocalPreview}
-      onSubmit={(event) => {
-        const data = new FormData(event.currentTarget);
-        if (data.get("discountActive") === "1") {
-          const finalPrice = Number(String(data.get("price") ?? "").replace(",", "."));
-          const previousPrice = Number(String(data.get("compareAtPrice") ?? "").replace(",", "."));
-          if (!Number.isFinite(previousPrice) || previousPrice <= finalPrice) {
-            event.preventDefault();
-            window.alert("O preco anterior tem de ser superior ao preco final.");
-            return;
-          }
-        }
-        onSubmitted();
-      }}
+      /* Sem onSubmit a fechar o editor: quem fecha e o efeito acima,
+         depois de o servidor responder ok. A validacao do desconto vive
+         no servidor, que a devolve como mensagem em vez de um alert(). */
       className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)_390px] overflow-hidden max-xl:grid-cols-[190px_minmax(0,1fr)] max-lg:grid-cols-1"
     >
       {plan && <input type="hidden" name="planId" value={plan.id} />}
@@ -686,16 +688,34 @@ function PlanEditor({
       <main className="min-h-0 overflow-y-auto overscroll-contain p-5 [scrollbar-color:rgba(214,167,91,.55)_rgba(255,255,255,.04)]">
         <PlanEditorTop
           mode={mode}
-          autosave={autosave}
+          aGuardar={aGuardar}
+          porGuardar={porGuardar}
+          erro={estado?.error ?? null}
           onCancel={onSubmitted}
           onPreview={() => setSection("preview")}
         />
 
+        {/*
+          TODAS as seccoes ficam montadas; so se esconde a que nao esta
+          activa.
+
+          Antes era `{section === "pricing" && <PlanPricing/>}`: os campos
+          da seccao inactiva nao existiam no DOM e, por isso, nao eram
+          submetidos. Guardar a partir do separador "Informacao" enviava
+          um formulario sem preco, sem duracao e sem o estado de
+          publicacao - a validacao rejeitava-o e, como o erro era um
+          `return` mudo, o editor fechava-se sem gravar nada e sem dizer
+          porque. Era impossivel publicar sem estar por acaso no separador
+          certo.
+
+          Esconder com CSS resolve porque um campo escondido continua a
+          ser submetido - so `disabled` o excluiria.
+        */}
         <div className="mt-5">
-          {section === "info" && (
+          <Seccao activa={section === "info"}>
             <PlanInformation plan={plan} />
-          )}
-          {section === "pricing" && (
+          </Seccao>
+          <Seccao activa={section === "pricing"}>
             <PlanPricing
               plan={plan}
               nextOrder={nextOrder}
@@ -704,8 +724,8 @@ function PlanEditor({
               discountActive={discountActive}
               setDiscountActive={setDiscountActive}
             />
-          )}
-          {section === "visual" && (
+          </Seccao>
+          <Seccao activa={section === "visual"}>
             <PlanVisual
               plan={plan}
               coverPreview={coverPreview}
@@ -717,16 +737,16 @@ function PlanEditor({
               setCropSource={setCropSource}
               setCoverPreview={setCoverPreview}
             />
-          )}
-          {section === "benefits" && (
+          </Seccao>
+          <Seccao activa={section === "benefits"}>
             <PlanBenefits
               features={features}
               setFeatures={setFeatures}
               addFeature={addFeature}
               moveFeature={moveFeature}
             />
-          )}
-          {section === "discord" && (
+          </Seccao>
+          <Seccao activa={section === "discord"}>
             <PlanDiscord
               plan={plan}
               discordRoles={discordRoles}
@@ -735,11 +755,15 @@ function PlanEditor({
               supportType={supportType}
               setSupportType={setSupportType}
             />
-          )}
-          {section === "promotion" && (
+          </Seccao>
+          <Seccao activa={section === "promotion"}>
             <PlanPromotion plan={plan} discountActive={discountActive} setDiscountActive={setDiscountActive} />
-          )}
-          {section === "publishing" && <PlanPublishing plan={plan} />}
+          </Seccao>
+          <Seccao activa={section === "publishing"}>
+            <PlanPublishing plan={plan} />
+          </Seccao>
+          {/* A validacao nao tem campos, portanto pode continuar a montar
+              e desmontar - assim recalcula sempre que se abre. */}
           {section === "preview" && <PlanValidation preview={preview} plan={plan} />}
         </div>
       </main>
@@ -813,12 +837,16 @@ function PlanSidebar({
 
 function PlanEditorTop({
   mode,
-  autosave,
+  aGuardar,
+  porGuardar,
+  erro,
   onCancel,
   onPreview,
 }: {
   mode: "create" | "edit";
-  autosave: string;
+  aGuardar: boolean;
+  porGuardar: boolean;
+  erro: string | null;
   onCancel: () => void;
   onPreview: () => void;
 }) {
@@ -826,29 +854,60 @@ function PlanEditorTop({
     <div className="sticky top-0 z-20 -mx-5 -mt-5 border-b border-white/[0.07] bg-[var(--panel-surface)]/95 px-5 py-4 backdrop-blur">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold text-[var(--chart-1)]">{autosave}</div>
+          <div className="text-[11px] font-semibold text-white/35">
+            {aGuardar
+              ? "A guardar…"
+              : porGuardar
+                ? "Alterações por guardar"
+                : mode === "edit"
+                  ? "Sem alterações"
+                  : "Novo plano"}
+          </div>
           <h3 className="mt-1 text-[15px] font-semibold text-white">
             {mode === "create" ? "Novo produto premium" : "Editar produto premium"}
           </h3>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="submit" className="rounded-lg bg-[var(--chart-1)] px-4 py-2.5 text-[12.5px] font-bold text-[#16082c] hover:opacity-90">
-            Guardar
+          <button
+            type="submit"
+            disabled={aGuardar}
+            className="rounded-lg bg-[var(--chart-1)] px-4 py-2.5 text-[12.5px] font-bold text-[#16082c] transition-opacity hover:opacity-90 disabled:opacity-45"
+          >
+            {aGuardar ? "A guardar…" : "Guardar"}
           </button>
-          <button type="submit" name="active" value="1" className="rounded-lg border border-[var(--chart-1)]/35 px-4 py-2.5 text-[12.5px] font-bold text-[var(--chart-1)] hover:bg-[var(--chart-1)]/10">
-            Guardar e Publicar
+          {/* `publishNow` e nao `active`: com os dois campos a chamarem-se
+              `active`, o formData ficava com dois valores e qual deles
+              vencia dependia da ordem no DOM. */}
+          <button
+            type="submit"
+            name="publishNow"
+            value="1"
+            disabled={aGuardar}
+            className="rounded-lg border border-neon/35 px-4 py-2.5 text-[12.5px] font-bold text-[var(--chart-1)] transition-colors hover:bg-neon/10 disabled:opacity-45"
+          >
+            Guardar e publicar
           </button>
-          <button type="button" className="rounded-lg border border-white/10 px-4 py-2.5 text-[12.5px] font-bold text-white/55 hover:border-[var(--chart-1)] hover:text-white">
-            Duplicar Plano
+          <button type="button" onClick={onPreview} className="rounded-lg border border-white/10 px-4 py-2.5 text-[12.5px] font-bold text-white/55 transition-colors hover:border-[var(--chart-1)] hover:text-white">
+            Pré-visualizar
           </button>
-          <button type="button" onClick={onPreview} className="rounded-lg border border-white/10 px-4 py-2.5 text-[12.5px] font-bold text-white/55 hover:border-[var(--chart-1)] hover:text-white">
-            Pre-visualizar
-          </button>
-          <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2.5 text-[12.5px] font-bold text-white/35 hover:text-white">
+          <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2.5 text-[12.5px] font-bold text-white/35 transition-colors hover:text-white">
             Cancelar
           </button>
         </div>
       </div>
+
+      {/* O erro aparece ao lado dos botoes, que e onde se esta a olhar
+          quando se carrega em Guardar. Antes nao aparecia em lado nenhum:
+          o servidor fazia `return` mudo e o editor fechava-se. */}
+      {erro && (
+        <p
+          role="alert"
+          className="mt-3 flex items-start gap-2 rounded-lg border border-critical/30 bg-critical/[0.08] px-3 py-2.5 text-[12.5px] text-[var(--critical)]"
+        >
+          <AlertTriangle size={14} className="mt-px shrink-0" />
+          {erro}
+        </p>
+      )}
     </div>
   );
 }
@@ -870,18 +929,6 @@ function PlanInformation({ plan }: { plan?: AdminPlan }) {
         </Field>
       </div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <Field label="Slug">
-          <input defaultValue={plan?.code ?? ""} placeholder="premium" className={inputClass} title="Preparado para URL publica futura" />
-        </Field>
-        <Field label="Estado">
-          <select defaultValue={plan?.active === 1 ? "published" : "private"} className={inputClass}>
-            <option value="draft">Rascunho</option>
-            <option value="published">Publicado</option>
-            <option value="private">Privado</option>
-            <option value="hidden">Oculto</option>
-            <option value="archived">Arquivado</option>
-          </select>
-        </Field>
       </div>
       <div className="mt-4">
         <Field label="Texto do botao">
@@ -1194,14 +1241,8 @@ function PlanPromotion({
             <option value="none">Nao permitir cupoes</option>
           </select>
         </Field>
-        <Field label="Campanha">
-          <input placeholder="Summer boost" className={inputClass} />
-        </Field>
         <Field label="Texto superior">
           <input name="promoText" defaultValue={plan?.promo_text ?? ""} maxLength={80} placeholder="Promocao limitada" className={inputClass} />
-        </Field>
-        <Field label="Texto inferior">
-          <input placeholder="Termina em breve" className={inputClass} />
         </Field>
         <Field label="Preco anterior">
           <input name="compareAtPrice" type="number" defaultValue={plan?.compare_at_cents != null ? (plan.compare_at_cents / 100).toFixed(2) : ""} required={discountActive} min="0" step="0.01" inputMode="decimal" placeholder="39.99" className={inputClass} />
@@ -1210,45 +1251,65 @@ function PlanPromotion({
           <input type="checkbox" name="discountActive" value="1" checked={discountActive} onChange={(event) => setDiscountActive(event.target.checked)} className="h-4 w-4 accent-[var(--chart-1)]" />
           Promocao ativa
         </label>
-        <Field label="Data inicio">
-          <input type="date" className={inputClass} />
-        </Field>
-        <Field label="Data fim">
-          <input type="date" className={inputClass} />
-        </Field>
       </div>
     </EditorCard>
   );
 }
 
+/**
+ * Estado de publicacao.
+ *
+ * Havia aqui cinco estados - Rascunho, Publicado, Privado, Oculto e
+ * Arquivado - mas o plano so tem um campo `active`, que e sim ou nao.
+ * Quatro dos cinco gravavam exactamente a mesma coisa, e ao reabrir o
+ * editor o estado escolhido aparecia sempre como "Privado". Escolher
+ * "Rascunho" ou "Arquivado" nao tinha efeito nenhum e nada o dizia.
+ *
+ * Ficam os dois que existem mesmo.
+ */
 function PlanPublishing({ plan }: { plan?: AdminPlan }) {
-  const [state, setState] = useState(plan?.active === 1 ? "published" : "private");
+  const [publicado, setPublicado] = useState(plan?.active === 1);
+
+  const opcoes: Array<[boolean, string, string]> = [
+    [true, "Publicado", "Aparece no site e pode ser comprado"],
+    [false, "Não publicado", "Fica só no painel, ninguém o vê nem o compra"],
+  ];
+
   return (
-    <EditorCard title="Publicacao" description="Estado comercial do plano e visibilidade no site.">
-      <input type="hidden" name="active" value={state === "published" ? "1" : "0"} />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {[
-          ["draft", "Rascunho", "Nao finalizado"],
-          ["published", "Publicado", "No site"],
-          ["private", "Privado", "So admin"],
-          ["hidden", "Oculto", "Checkout direto"],
-          ["archived", "Arquivado", "Sem venda"],
-        ].map(([key, label, text]) => (
+    <EditorCard title="Publicação" description="Se o plano aparece no site e pode ser comprado.">
+      <input type="hidden" name="active" value={publicado ? "1" : "0"} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        {opcoes.map(([valor, label, texto]) => (
           <button
-            key={key}
+            key={label}
             type="button"
-            onClick={() => setState(key)}
+            onClick={() => setPublicado(valor)}
+            aria-pressed={publicado === valor}
             className={`rounded-xl border p-4 text-left transition ${
-              state === key
-                ? "border-[var(--chart-1)]/45 bg-[var(--chart-1)]/10"
+              publicado === valor
+                ? "border-neon/45 bg-neon/10"
                 : "border-white/[0.07] bg-black/15 hover:border-white/15"
             }`}
           >
-            <div className="text-[13px] font-semibold text-white">{label}</div>
-            <div className="mt-1 text-[11.5px] text-white/32">{text}</div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  publicado === valor
+                    ? valor
+                      ? "bg-[var(--good)]"
+                      : "bg-white/40"
+                    : "bg-white/15"
+                }`}
+              />
+              <span className="text-[13px] font-semibold text-white">{label}</span>
+            </div>
+            <div className="mt-1 text-[11.5px] text-white/32">{texto}</div>
           </button>
         ))}
       </div>
+      <p className="mt-3 text-[12px] text-white/30">
+        O botão “Guardar e publicar”, lá em cima, publica de imediato seja qual for a opção escolhida aqui.
+      </p>
     </EditorCard>
   );
 }
@@ -1256,7 +1317,7 @@ function PlanPublishing({ plan }: { plan?: AdminPlan }) {
 function PlanValidation({ preview, plan }: { preview: PlanCardData; plan?: AdminPlan }) {
   return (
     <EditorCard title="Validacao e historico" description="Checklist antes de publicar e timeline do plano.">
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div>
         <div>
           <h3 className="mb-3 text-[13px] font-semibold text-white">Validacao</h3>
           <div className="space-y-2">
@@ -1268,33 +1329,11 @@ function PlanValidation({ preview, plan }: { preview: PlanCardData; plan?: Admin
             ))}
           </div>
         </div>
-        <PlanHistory plan={plan} />
       </div>
     </EditorCard>
   );
 }
 
-function PlanHistory({ plan }: { plan?: AdminPlan }) {
-  const rows = [
-    ["Hoje", "Editor aberto"],
-    ["Ultima alteracao", plan ? "Plano preparado para auditoria" : "Novo plano iniciado"],
-    ["Criacao", plan ? `Plano #${plan.id}` : "Ainda nao criado"],
-  ];
-  return (
-    <div>
-      <h3 className="mb-3 text-[13px] font-semibold text-white">Historico</h3>
-      <div className="space-y-3">
-        {rows.map(([time, text]) => (
-          <div key={`${time}-${text}`} className="relative pl-5">
-            <span className="absolute left-0 top-1.5 h-2 w-2 rounded-full bg-[var(--chart-1)]" />
-            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/28">{time}</div>
-            <div className="mt-0.5 text-[12.5px] text-white/55">{text}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function PlanPreview({
   plan,
@@ -1539,7 +1578,6 @@ function matchesFilter(plan: AdminPlan, filter: FilterKey) {
   if (filter === "public") return plan.active === 1;
   if (filter === "private") return plan.active !== 1;
   if (filter === "draft") return !plan.cover_url || parsePlanFeatures(plan.features_json).length === 0;
-  if (filter === "archived") return false;
   if (filter === "promo") return plan.discount_active === 1 || plan.badge_active === 1;
   if (filter === "no_promo") return plan.discount_active !== 1 && plan.badge_active !== 1;
   if (filter === "lifetime") return plan.days === 0;
@@ -1668,3 +1706,14 @@ const inputClass =
 
 const iconButton =
   "grid h-8 w-8 place-items-center rounded-lg border border-white/[0.08] text-white/45 transition hover:border-[var(--chart-1)] hover:text-white";
+
+/**
+ * Uma seccao do editor.
+ *
+ * Fica sempre montada e apenas escondida quando nao esta activa: os
+ * campos de todas as seccoes tem de ir no mesmo submit. O `hidden` do
+ * HTML basta - controlos escondidos continuam a ser submetidos.
+ */
+function Seccao({ activa, children }: { activa: boolean; children: ReactNode }) {
+  return <div hidden={!activa}>{children}</div>;
+}
