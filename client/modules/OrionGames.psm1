@@ -197,6 +197,90 @@ function Get-OrionXboxGames {
     return @($jogos | Sort-Object -Property id -Unique)
 }
 
+function Get-OrionRobloxGames {
+    <#
+        Roblox.
+
+        Nao vem de nenhuma loja: instala-se sozinho em
+        %LOCALAPPDATA%\Roblox\Versions\version-<hash>, e o Player e o Studio
+        sao instalacoes separadas, cada uma com a sua pasta.
+
+        A pasta Versions guarda TAMBEM as versoes antigas - neste PC havia
+        cinco. Listar a pasta daria o mesmo jogo repetido cinco vezes, com
+        quatro entradas que ja nao arrancam. Por isso a fonte principal e o
+        registo de desinstalacao, que aponta sempre para a versao em uso.
+
+        So se varre a pasta quando o registo nao tem nada, e mesmo ai fica
+        so a versao com o executavel mais recente.
+    #>
+    $jogos = @()
+
+    # O DisplayName traz o nome da conta Windows ("Roblox Player for joao"),
+    # que nao tem nada que fazer na biblioteca de jogos. Fica o nome do
+    # produto, deduzido do executavel que la esta.
+    $executaveis = [ordered]@{
+        'RobloxPlayerBeta.exe' = 'Roblox'
+        'RobloxStudioBeta.exe' = 'Roblox Studio'
+    }
+
+    $encontrados = @{}
+
+    foreach ($raiz in @(
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )) {
+        foreach ($chave in Get-ChildItem -Path $raiz -ErrorAction SilentlyContinue) {
+            $info = Get-ItemProperty -Path $chave.PSPath -ErrorAction SilentlyContinue
+            if (-not $info -or $info.DisplayName -notmatch '^Roblox') { continue }
+
+            $local = $info.InstallLocation
+            if (-not $local -or -not (Test-Path -LiteralPath $local)) { continue }
+
+            foreach ($exe in $executaveis.Keys) {
+                if (-not (Test-Path -LiteralPath (Join-Path $local $exe))) { continue }
+                $encontrados[$executaveis[$exe]] = $local
+            }
+        }
+    }
+
+    # Sem registo utilizavel, procura-se na pasta - mas so a versao mais
+    # recente de cada executavel.
+    if ($encontrados.Count -eq 0) {
+        $versoes = Join-Path $env:LOCALAPPDATA 'Roblox\Versions'
+        if (Test-Path -LiteralPath $versoes) {
+            foreach ($exe in $executaveis.Keys) {
+                $mais = Get-ChildItem -LiteralPath $versoes -Directory -ErrorAction SilentlyContinue |
+                    Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName $exe) } |
+                    Sort-Object -Property LastWriteTime -Descending |
+                    Select-Object -First 1
+                if ($mais) { $encontrados[$executaveis[$exe]] = $mais.FullName }
+            }
+        }
+    }
+
+    foreach ($nome in $encontrados.Keys) {
+        $caminho = $encontrados[$nome]
+
+        $bytes = 0
+        try {
+            $bytes = [int64]((Get-ChildItem -LiteralPath $caminho -Recurse -File -Force -ErrorAction SilentlyContinue |
+                Measure-Object -Property Length -Sum).Sum)
+        } catch { $bytes = 0 }
+
+        $jogos += [pscustomobject]@{
+            id          = "roblox:$($nome.ToLowerInvariant() -replace '\s+', '-')"
+            name        = $nome
+            platform    = 'Roblox'
+            installPath = $caminho
+            sizeBytes   = $bytes
+            launchUri   = $null
+        }
+    }
+
+    return @($jogos | Sort-Object -Property id -Unique)
+}
+
 function Get-OrionGames {
     <#
         Junta todas as lojas. Cada uma falha de forma independente: um
@@ -204,10 +288,11 @@ function Get-OrionGames {
     #>
     $todos = @()
     $fontes = [ordered]@{
-        Steam = { Get-OrionSteamGames }
-        Epic  = { Get-OrionEpicGames }
-        GOG   = { Get-OrionGogGames }
-        Xbox  = { Get-OrionXboxGames }
+        Steam  = { Get-OrionSteamGames }
+        Epic   = { Get-OrionEpicGames }
+        GOG    = { Get-OrionGogGames }
+        Xbox   = { Get-OrionXboxGames }
+        Roblox = { Get-OrionRobloxGames }
     }
     $avisos = @()
 
@@ -224,4 +309,5 @@ function Get-OrionGames {
 }
 
 Export-ModuleMember -Function Get-OrionGames, Get-OrionSteamGames, Get-OrionEpicGames,
+    Get-OrionRobloxGames,
     Get-OrionGogGames, Get-OrionXboxGames, Get-OrionSteamLibraries

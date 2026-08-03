@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: dark;
   font-family: Inter, system-ui, sans-serif;
   color: #f4f5f8;
@@ -142,31 +142,225 @@ body { color: var(--text); background: var(--bg); }
 .form-error { margin: 13px 0; display: flex; align-items: flex-start; gap: 9px; padding: 11px 12px; border: 1px solid rgba(238,101,114,.25); border-radius: 7px; background: rgba(238,101,114,.07); color: #f58d97; font-size: 11.5px; line-height: 1.45; }
 .form-error svg { flex: 0 0 auto; margin-top: 1px; }
 
-.app-shell { height: 100%; padding-top: 42px; display: grid; grid-template-columns: 220px 1fr; }
-.sidebar { min-height: 0; display: flex; flex-direction: column; padding: 22px 14px 14px; border-right: 1px solid var(--border); background: #090c11; }
-.sidebar-logo { display: flex; align-items: center; gap: 11px; padding: 0 10px 24px; }
-.sidebar-logo img { width: 37px; height: 37px; object-fit: contain; border-radius: 0; }
-.sidebar-logo div { display: flex; flex-direction: column; }
-.sidebar-logo b { font-family: Sora, sans-serif; font-size: 15px; }
-.sidebar-logo span { margin-top: 3px; color: var(--violet-strong); font-family: Sora, sans-serif; font-size: 7px; font-weight: 700; letter-spacing: 3px; }
-.sidebar nav { display: grid; gap: 13px; overflow-y: auto; padding-right: 2px; }
-.sidebar-section { display: grid; gap: 6px; }
-.sidebar-section-items { display: grid; gap: 4px; }
-.nav-button { position: relative; height: 42px; display: flex; align-items: center; gap: 11px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: #727d8e; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; }
-.nav-button > svg { width: 17px; }
-.nav-button:hover { background: rgba(255,255,255,.03); color: #c5ccd6; }
-.nav-button.active { color: #f2f3f6; background: rgba(214,167,91,.08); }
+/* ====================================================== BARRA LATERAL ==
+   Preto e dourado, como o resto da aplicacao. O dourado vive em --violet
+   e --violet-strong (nomes antigos, valores dourados).
+
+   Uma so duracao e uma so curva para tudo o que se move aqui: com tempos
+   diferentes por elemento, a barra parece feita aos bocados.
+   ====================================================================== */
+.app-shell { height: 100%; padding-top: 42px; display: grid; grid-template-columns: 232px 1fr; transition: grid-template-columns var(--nav-t) var(--nav-e); }
+.app-shell[data-sidebar="compacta"] { grid-template-columns: 72px 1fr; }
+
+:root { --nav-t: 200ms; --nav-e: cubic-bezier(.22, 1, .36, 1); }
+
+.sidebar {
+  position: relative; min-height: 0; display: flex; flex-direction: column;
+  padding: 16px 12px 12px; border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sidebar) 94%, #d6a75b 6%), var(--sidebar));
+}
+
+/* ---------------------------------------------------------------- topo */
+.sidebar-logo {
+  position: relative; display: flex; align-items: center; gap: 11px;
+  margin: 0 2px 14px; padding: 4px 6px 14px; border-radius: 10px;
+  color: inherit; text-decoration: none; cursor: pointer;
+  background: transparent; border: 0; text-align: left; width: calc(100% - 4px);
+  transition: background var(--nav-t) var(--nav-e);
+}
+/* Linha dourada por baixo da logo. Desvanece nas pontas em vez de cortar. */
+.sidebar-logo::after {
+  content: ""; position: absolute; inset-inline: 4px; bottom: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(214,167,91,.26) 22%, rgba(214,167,91,.34) 50%, rgba(214,167,91,.26) 78%, transparent);
+}
+.sidebar-logo img {
+  width: 40px; height: 40px; flex: 0 0 auto; object-fit: contain;
+  transition: filter var(--nav-t) var(--nav-e), transform var(--nav-t) var(--nav-e);
+}
+.sidebar-logo:hover img { transform: scale(1.05); filter: drop-shadow(0 0 9px rgba(214,167,91,.4)); }
+.sidebar-logo div { display: flex; flex-direction: column; min-width: 0; }
+.sidebar-logo b { font-family: Sora, sans-serif; font-size: 16px; font-weight: 800; letter-spacing: .3px; }
+.sidebar-logo span {
+  margin-top: 3px; color: var(--violet-strong); font-family: Sora, sans-serif;
+  font-size: 7.5px; font-weight: 700; letter-spacing: 3.2px;
+}
+
+/* -------------------------------------------------------------- grupos */
+.sidebar nav { display: grid; gap: 10px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
+.sidebar-section { display: grid; gap: 4px; }
+.sidebar-nav-label {
+  padding: 0 12px; color: rgba(214,167,91,.5); font-size: 8.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------- itens */
+/* Altura, padding, raio e alinhamento iguais em todos, sem excepcao. */
+.nav-button {
+  position: relative; width: 100%; height: 38px; display: flex; align-items: center;
+  gap: 10px; padding: 0 12px; border: 1px solid transparent; border-radius: 9px;
+  background: transparent; color: #737e8f; font-size: 12px; font-weight: 600;
+  text-align: left; cursor: pointer;
+  transition: background var(--nav-t) var(--nav-e), color var(--nav-t) var(--nav-e), border-color var(--nav-t) var(--nav-e);
+}
+.nav-button > svg { flex: 0 0 auto; width: 17px; height: 17px; transition: color var(--nav-t) var(--nav-e); }
+.nav-button > span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.nav-button:hover { background: rgba(255,255,255,.045); color: #eef1f6; }
+.nav-button:hover > svg { color: var(--violet-strong); }
+.nav-button:focus-visible { outline: 0; border-color: rgba(214,167,91,.45); }
+
+.nav-button.active {
+  color: #f4f5f8; background: rgba(214,167,91,.09);
+  border-color: rgba(214,167,91,.18);
+  box-shadow: 0 0 18px -8px rgba(214,167,91,.5);
+}
 .nav-button.active > svg { color: var(--violet-strong); }
-.nav-button i { position: absolute; left: -14px; width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--violet); }
-.sidebar-account { margin-top: auto; display: grid; grid-template-columns: 34px minmax(0, 1fr) 30px; align-items: center; gap: 9px; padding: 12px 9px 4px; border-top: 1px solid var(--border); }
-.avatar { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 6px; background: var(--surface-2); color: var(--violet-strong); }
+/* Barra vertical a esquerda: e o `i` com layoutId, que desliza entre itens. */
+.nav-button i { position: absolute; left: -12px; width: 3px; height: 18px; border-radius: 0 3px 3px 0; background: var(--violet); }
+/* Ponto a direita, so no item activo. */
+.nav-dot { flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: var(--violet-strong); box-shadow: 0 0 6px rgba(214,167,91,.7); }
+
+/* -------------------------------------------------------------- badges */
+.nav-badge {
+  flex: 0 0 auto; min-width: 18px; height: 18px; display: grid; place-items: center;
+  padding: 0 5px; border-radius: 9px; background: rgba(214,167,91,.16);
+  color: var(--violet-strong); font-size: 9.5px; font-weight: 800; letter-spacing: .4px;
+}
+.nav-badge.ponto { min-width: 6px; width: 6px; height: 6px; padding: 0; background: var(--violet-strong); box-shadow: 0 0 6px rgba(214,167,91,.7); }
+
+/* ------------------------------------------------------ acesso interno */
+.sidebar-role-card {
+  position: relative; display: grid; grid-template-columns: 34px minmax(0,1fr) 14px;
+  align-items: center; gap: 10px; margin-top: 12px; padding: 11px 12px;
+  border: 1px solid rgba(214,167,91,.22); border-radius: 11px;
+  background: linear-gradient(135deg, rgba(214,167,91,.12), rgba(214,167,91,.03) 62%);
+  color: inherit; text-align: left; cursor: pointer; width: 100%;
+  transition: border-color var(--nav-t) var(--nav-e), transform var(--nav-t) var(--nav-e), box-shadow var(--nav-t) var(--nav-e);
+}
+.sidebar-role-card:hover { border-color: rgba(214,167,91,.45); transform: translateY(-1px); box-shadow: 0 0 22px -10px rgba(214,167,91,.65); }
+.sidebar-role-card .coroa { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: rgba(214,167,91,.14); color: var(--violet-strong); }
+.sidebar-role-card em { display: block; color: rgba(214,167,91,.72); font-size: 8.5px; font-style: normal; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; }
+.sidebar-role-card strong { display: block; margin-top: 2px; font-size: 12.5px; }
+.sidebar-role-card small { display: block; margin-top: 1px; overflow: hidden; color: var(--text-3); font-size: 10px; white-space: nowrap; text-overflow: ellipsis; }
+.sidebar-role-card .seta { color: rgba(214,167,91,.55); transition: transform var(--nav-t) var(--nav-e); }
+.sidebar-role-card:hover .seta { transform: translateX(2px); }
+
+/* ----------------------------------------------------------- proteccao */
+.sidebar-status {
+  display: grid; grid-template-columns: 26px minmax(0,1fr); align-items: center; gap: 9px;
+  margin-top: 10px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px;
+  background: rgba(255,255,255,.018);
+}
+.sidebar-status .escudo { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: rgba(82,201,139,.1); color: var(--green); }
+.sidebar-status b { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; }
+.sidebar-status small { display: block; margin-top: 2px; color: var(--text-3); font-size: 9.5px; }
+/* Ponto verde a pulsar: indica que e estado em tempo real, nao um rotulo. */
+.pulso { position: relative; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+.pulso::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1px solid var(--green); opacity: .55; animation: pulso 2.1s ease-out infinite; }
+@keyframes pulso { 0% { transform: scale(.7); opacity: .55; } 70% { transform: scale(1.5); opacity: 0; } 100% { opacity: 0; } }
+
+/* ------------------------------------------------------------- perfil */
+.sidebar-account { position: relative; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+.sidebar-account-button {
+  width: 100%; display: grid; grid-template-columns: 36px minmax(0,1fr) 14px; align-items: center;
+  gap: 10px; padding: 8px 8px; border: 1px solid transparent; border-radius: 10px;
+  background: transparent; color: inherit; text-align: left; cursor: pointer;
+  transition: background var(--nav-t) var(--nav-e), border-color var(--nav-t) var(--nav-e);
+}
+.sidebar-account-button:hover { background: rgba(255,255,255,.04); border-color: var(--border); }
+.sidebar-account-button[aria-expanded="true"] { background: rgba(214,167,91,.07); border-color: rgba(214,167,91,.2); }
+.avatar { position: relative; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: var(--surface-2); color: var(--violet-strong); }
 .avatar img { width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
-.sidebar-account div:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
-.sidebar-account strong { overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; white-space: nowrap; }
-.sidebar-account span { min-width: 0; margin-top: 3px; display: flex; align-items: center; gap: 4px; overflow: hidden; color: var(--green); font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-account span svg { flex: 0 0 auto; }
-.sidebar-account button, .icon-button, .modal-close, .toast button { border: 0; background: transparent; color: #687386; cursor: pointer; }
-.sidebar-account button:hover, .modal-close:hover, .toast button:hover { color: #fff; }
+.avatar .online { position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px; border: 2px solid var(--sidebar); border-radius: 50%; background: var(--green); }
+.sidebar-account strong { display: block; overflow: hidden; font-size: 11.5px; white-space: nowrap; text-overflow: ellipsis; }
+.sidebar-account .linha2 { display: flex; align-items: center; gap: 4px; margin-top: 2px; overflow: hidden; color: var(--text-3); font-size: 9.5px; white-space: nowrap; text-overflow: ellipsis; }
+.sidebar-account .linha2 svg { flex: 0 0 auto; color: var(--green); }
+.sidebar-account .chevron { color: var(--text-3); transition: transform var(--nav-t) var(--nav-e); }
+.sidebar-account-button[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+
+/* ------------------------------------------------- menu do utilizador */
+.sidebar-menu {
+  position: absolute; left: 4px; right: 4px; bottom: calc(100% + 6px); z-index: 40;
+  padding: 5px; border: 1px solid var(--border-strong); border-radius: 11px;
+  background: var(--modal-surface); box-shadow: 0 18px 40px -18px rgba(0,0,0,.85);
+}
+.sidebar-menu button {
+  width: 100%; height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 10px;
+  border: 0; border-radius: 8px; background: transparent; color: var(--text-2);
+  font-size: 11.5px; font-weight: 600; text-align: left; cursor: pointer;
+  transition: background var(--nav-t) var(--nav-e), color var(--nav-t) var(--nav-e);
+}
+.sidebar-menu button svg { flex: 0 0 auto; width: 15px; height: 15px; }
+.sidebar-menu button:hover { background: rgba(255,255,255,.05); color: #f4f5f8; }
+.sidebar-menu button:hover svg { color: var(--violet-strong); }
+.sidebar-menu hr { height: 1px; margin: 4px 6px; border: 0; background: var(--border); }
+.sidebar-menu button.sair:hover { background: rgba(238,101,114,.1); color: var(--red); }
+.sidebar-menu button.sair:hover svg { color: var(--red); }
+
+/* ---------------------------------------------------------- recolher */
+.sidebar-collapse {
+  position: absolute; top: 20px; right: -11px; z-index: 20;
+  width: 22px; height: 22px; display: grid; place-items: center;
+  border: 1px solid var(--border-strong); border-radius: 50%;
+  background: var(--surface-2); color: var(--text-3); cursor: pointer;
+  opacity: 0; transition: opacity var(--nav-t) var(--nav-e), color var(--nav-t) var(--nav-e), border-color var(--nav-t) var(--nav-e);
+}
+.sidebar:hover .sidebar-collapse, .sidebar-collapse:focus-visible { opacity: 1; }
+.sidebar-collapse:hover { color: var(--violet-strong); border-color: rgba(214,167,91,.45); }
+
+/* ------------------------------------------------------- modo compacto
+   So icones. O texto sai do fluxo em vez de encolher, senao ficava a
+   cortar palavras a meio durante a transicao. */
+.app-shell[data-sidebar="compacta"] .sidebar { padding-inline: 10px; }
+.app-shell[data-sidebar="compacta"] .sidebar-logo { justify-content: center; padding-inline: 0; }
+.app-shell[data-sidebar="compacta"] .sidebar-logo div,
+.app-shell[data-sidebar="compacta"] .nav-button > span,
+.app-shell[data-sidebar="compacta"] .nav-badge,
+.app-shell[data-sidebar="compacta"] .nav-dot,
+.app-shell[data-sidebar="compacta"] .sidebar-nav-label,
+.app-shell[data-sidebar="compacta"] .sidebar-role-card :is(em, strong, small, .seta),
+.app-shell[data-sidebar="compacta"] .sidebar-status :is(b, small),
+.app-shell[data-sidebar="compacta"] .sidebar-account :is(strong, .linha2, .chevron) { display: none; }
+.app-shell[data-sidebar="compacta"] .nav-button { justify-content: center; padding-inline: 0; }
+.app-shell[data-sidebar="compacta"] .sidebar-section { gap: 2px; }
+.app-shell[data-sidebar="compacta"] .sidebar-role-card,
+.app-shell[data-sidebar="compacta"] .sidebar-status,
+.app-shell[data-sidebar="compacta"] .sidebar-account-button { grid-template-columns: 1fr; justify-items: center; }
+
+/* Tooltip do modo compacto. So aparece quando nao ha texto para ler. */
+.nav-tip {
+  position: absolute; left: calc(100% + 10px); top: 50%; translate: 0 -50%; z-index: 60;
+  padding: 5px 9px; border: 1px solid var(--border-strong); border-radius: 7px;
+  background: var(--modal-surface); color: var(--text); font-size: 11px; font-weight: 600;
+  white-space: nowrap; pointer-events: none; opacity: 0;
+  transition: opacity var(--nav-t) var(--nav-e);
+}
+.app-shell[data-sidebar="compacta"] .nav-button:hover .nav-tip,
+.app-shell[data-sidebar="compacta"] .sidebar-role-card:hover .nav-tip { opacity: 1; }
+.app-shell:not([data-sidebar="compacta"]) .nav-tip { display: none; }
+
+/* ------------------------------------------------- janelas estreitas
+   A aplicacao pode ser reduzida ate ficar sem espaco para a barra e o
+   conteudo lado a lado. Ai a barra passa a gaveta por cima do conteudo,
+   em vez de espremer os dois. */
+@media (max-width: 720px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed; inset-block: 42px 0; left: 0; z-index: 70; width: 250px;
+    translate: -100% 0; transition: translate var(--nav-t) var(--nav-e);
+    box-shadow: 0 0 60px -10px rgba(0,0,0,.9);
+  }
+  .app-shell[data-gaveta="aberta"] .sidebar { translate: 0 0; }
+  .sidebar-backdrop { position: fixed; inset-block: 42px 0; inset-inline: 0; z-index: 60; border: 0; background: var(--backdrop); backdrop-filter: blur(3px); }
+  .sidebar-collapse { display: none; }
+}
+@media (min-width: 721px) { .sidebar-backdrop, .sidebar-abrir { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell, .sidebar, .nav-button, .sidebar-logo img, .sidebar-role-card, .nav-tip, .sidebar-menu button { transition: none; }
+  .pulso::after { animation: none; }
+}
+
 
 .content { min-width: 0; min-height: 0; overflow-y: auto; background: var(--bg); }
 .page { width: 100%; max-width: 1480px; margin: 0 auto; padding: 32px 34px 48px; }

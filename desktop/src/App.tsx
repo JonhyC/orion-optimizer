@@ -3,7 +3,9 @@ import {
   Activity,
   ArrowLeft,
   Check,
+  ChevronLeft,
   ChevronRight,
+  ChevronUp,
   CircleAlert,
   Clock3,
   Crown,
@@ -16,6 +18,7 @@ import {
   HardDrive,
   History,
   Laptop,
+  Menu,
   LockKeyhole,
   LogOut,
   MemoryStick,
@@ -40,7 +43,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState, useRef } from "react";
 import logo from "./assets/orion.svg";
 
 type View = "catalog" | "active" | "games" | "performance" | "history" | "settings" | "internal";
@@ -306,6 +309,14 @@ export default function App() {
   const [view, setView] = useState<View>("catalog");
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [toast, setToast] = useState<{ tone: "good" | "bad"; message: string } | null>(null);
+  // Preferencia da barra lateral. Fica no localStorage para a aplicacao
+  // abrir sempre como o utilizador a deixou.
+  const [compacta, setCompacta] = useState(() => localStorage.getItem("orion-sidebar") === "compacta");
+  const [gavetaAberta, setGavetaAberta] = useState(false);
+  const [ancoraDefinicoes, setAncoraDefinicoes] = useState<string | null>(null);
+  // Quantas activas ja existiam da ultima vez que o Historico foi aberto.
+  // A diferenca e o que o badge mostra - sem isto seria um numero fixo.
+  const [vistasNoHistorico, setVistasNoHistorico] = useState(() => Number(localStorage.getItem("orion-historico-visto") ?? 0));
   const [theme, setTheme] = useState<Theme>(() => localStorage.getItem("orion-theme") === "light" ? "light" : "dark");
   const [animations, setAnimations] = useState(() => localStorage.getItem("orion-animations") !== "off");
   const [density, setDensity] = useState<Density>(() => localStorage.getItem("orion-density") === "compact" ? "compact" : "comfortable");
@@ -392,11 +403,53 @@ export default function App() {
           <motion.div
             key="shell"
             className="app-shell"
+            data-sidebar={compacta ? "compacta" : "normal"}
+            data-gaveta={gavetaAberta ? "aberta" : "fechada"}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <Sidebar view={view} setView={setView} account={catalog.account} appVersion={appVersion} onLogout={logout} />
+            {/* So aparece quando a janela e demasiado estreita para a barra
+                e o conteudo caberem lado a lado - ver o media query. */}
+            <button
+              type="button"
+              className="sidebar-abrir"
+              aria-label="Abrir navegação"
+              onClick={() => setGavetaAberta(true)}
+            >
+              <Menu size={16} />
+            </button>
+            {gavetaAberta && (
+              <button
+                type="button"
+                className="sidebar-backdrop"
+                aria-label="Fechar navegação"
+                onClick={() => setGavetaAberta(false)}
+              />
+            )}
+            <Sidebar
+              view={view}
+              setView={(destino) => {
+                setView(destino);
+                setGavetaAberta(false);
+                // Abrir o Historico marca as activas de agora como vistas:
+                // e o que faz o badge voltar a zero em vez de crescer para
+                // sempre.
+                if (destino === "history") {
+                  const total = activeOptimizations.length;
+                  setVistasNoHistorico(total);
+                  localStorage.setItem("orion-historico-visto", String(total));
+                }
+              }}
+              account={catalog.account}
+              appVersion={appVersion}
+              onLogout={logout}
+              compacta={compacta}
+              setCompacta={(v) => { setCompacta(v); localStorage.setItem("orion-sidebar", v ? "compacta" : "normal"); }}
+              ativas={activeOptimizations.length}
+              historicoNovos={Math.max(0, activeOptimizations.length - vistasNoHistorico)}
+              onAbrirDefinicoes={(ancora) => { setView("settings"); setAncoraDefinicoes(ancora); setGavetaAberta(false); }}
+            />
             <main className="content">
               <AnimatePresence mode="wait">
                 {view === "catalog" && (
@@ -415,7 +468,7 @@ export default function App() {
                 {view === "games" && <GamesView key="games" state={catalog} profile={profile} activeOptimizations={activeOptimizations} notify={setToast} onActiveChange={setActiveOptimizations} />}
                 {view === "performance" && <PerformanceView key="performance" profile={profile} notify={setToast} />}
                 {view === "history" && <HistoryView key="history" notify={setToast} onActiveChange={setActiveOptimizations} />}
-                {view === "settings" && <SettingsView key="settings" account={catalog.account} profile={profile} settings={settings} appVersion={appVersion} theme={theme} setTheme={setTheme} animations={animations} setAnimations={setAnimations} density={density} setDensity={setDensity} onElevate={elevateApp} />}
+                {view === "settings" && <SettingsView key="settings" account={catalog.account} profile={profile} settings={settings} appVersion={appVersion} theme={theme} setTheme={setTheme} animations={animations} setAnimations={setAnimations} density={density} setDensity={setDensity} onElevate={elevateApp} compacta={compacta} setCompacta={(v) => { setCompacta(v); localStorage.setItem("orion-sidebar", v ? "compacta" : "normal"); }} ancora={ancoraDefinicoes} />}
                 {view === "internal" && (
                   <InternalView key="internal" state={catalog} profile={profile} settings={settings} notify={setToast} />
                 )}
@@ -579,11 +632,69 @@ function LoginScreen({
   );
 }
 
-function Sidebar({ view, setView, account, appVersion, onLogout }: { view: View; setView: (view: View) => void; account: CatalogState["account"]; appVersion: string; onLogout: () => void }) {
+/**
+ * Itens do menu do utilizador.
+ *
+ * Cada um leva a uma seccao REAL das Definicoes - nenhum abre um ecra que
+ * nao existe. A ancora e o id do painel correspondente, que a vista de
+ * definicoes usa para rolar ate la.
+ */
+const MENU_PERFIL: Array<{ id: string; label: string; icone: ReactNode; ancora: string }> = [
+  { id: "perfil", label: "O meu perfil", icone: <UserRound />, ancora: "geral" },
+  { id: "seguranca", label: "Segurança", icone: <ShieldCheck />, ancora: "protecao" },
+  { id: "notificacoes", label: "Notificações", icone: <Activity />, ancora: "notificacoes" },
+  { id: "dispositivos", label: "Dispositivos", icone: <Laptop />, ancora: "diagnostico" },
+  { id: "preferencias", label: "Preferências", icone: <Settings2 />, ancora: "aparencia" },
+];
+
+function Sidebar({ view, setView, account, appVersion, onLogout, compacta, setCompacta, ativas, historicoNovos, onAbrirDefinicoes }: {
+  view: View;
+  setView: (view: View) => void;
+  account: CatalogState["account"];
+  appVersion: string;
+  onLogout: () => void;
+  compacta: boolean;
+  setCompacta: (v: boolean) => void;
+  /** Numero de otimizacoes activas. Dado real, nao um contador decorativo. */
+  ativas: number;
+  /** Activas que apareceram desde a ultima visita ao Historico. */
+  historicoNovos: number;
+  onAbrirDefinicoes: (ancora: string) => void;
+}) {
   const internal = INTERNAL_ROLES.has(account.role);
+  const [menuAberto, setMenuAberto] = useState(false);
+  const perfilRef = useRef<HTMLDivElement>(null);
+
+  // Fecha ao clicar fora e no Escape. Um menu que so fecha no proprio
+  // botao e das coisas que mais denunciam um menu improvisado.
+  useEffect(() => {
+    if (!menuAberto) return;
+    const fora = (e: MouseEvent) => { if (!perfilRef.current?.contains(e.target as Node)) setMenuAberto(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuAberto(false); };
+    document.addEventListener("mousedown", fora);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", fora); document.removeEventListener("keydown", esc); };
+  }, [menuAberto]);
+
+  const cargo = ROLE_LABEL[account.role] ?? account.role;
+
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo"><img src={logo} alt="" /><div><b>ORION 2.0</b><span>OPTIMIZER</span></div></div>
+      <button
+        type="button"
+        className="sidebar-collapse"
+        onClick={() => setCompacta(!compacta)}
+        title={compacta ? "Expandir barra lateral" : "Recolher barra lateral"}
+        aria-label={compacta ? "Expandir barra lateral" : "Recolher barra lateral"}
+      >
+        {compacta ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+      </button>
+
+      <button type="button" className="sidebar-logo" onClick={() => setView("catalog")} title="Orion Optimizer 2.0">
+        <img src={logo} alt="" />
+        <div><b>ORION 2.0</b><span>OPTIMIZER</span></div>
+      </button>
+
       <nav>
         <SidebarSection label="Jogos e sistema">
           <NavButton active={view === "games"} icon={<Gamepad2 />} label="Jogos" onClick={() => setView("games")} />
@@ -591,49 +702,117 @@ function Sidebar({ view, setView, account, appVersion, onLogout }: { view: View;
         </SidebarSection>
         <SidebarSection label="Optimizer">
           <NavButton active={view === "catalog"} icon={<Gauge />} label="Otimizações" onClick={() => setView("catalog")} />
-          <NavButton active={view === "active"} icon={<Check />} label="Ativas" onClick={() => setView("active")} />
-          <NavButton active={view === "history"} icon={<History />} label="Histórico" onClick={() => setView("history")} />
+          <NavButton
+            active={view === "active"}
+            icon={<Check />}
+            label="Ativas"
+            onClick={() => setView("active")}
+            badge={ativas > 0 ? String(ativas) : null}
+          />
+          <NavButton
+            active={view === "history"}
+            icon={<History />}
+            label="Histórico"
+            onClick={() => setView("history")}
+            badge={historicoNovos > 0 ? String(historicoNovos) : null}
+          />
         </SidebarSection>
         <SidebarSection label="Conta">
+          {/* Sem ponto de novidade: a aplicacao nao tem sinal nenhum de
+              "ha algo novo nas definicoes", e um ponto permanente deixa
+              de ser lido a segunda vez. */}
           <NavButton active={view === "settings"} icon={<Settings2 />} label="Definições" onClick={() => setView("settings")} />
         </SidebarSection>
         {internal && (
           <SidebarSection label="Equipa interna">
-            <NavButton active={view === "internal"} icon={<Crown />} label="Centro da equipa" onClick={() => setView("internal")} />
+            <NavButton
+              active={view === "internal"}
+              icon={<Crown />}
+              label="Centro da equipa"
+              onClick={() => setView("internal")}
+              badge={account.role === "owner" ? "OWNER" : account.role === "developer" ? "ADMIN" : "STAFF"}
+            />
           </SidebarSection>
         )}
       </nav>
-      {internal && <SidebarRoleCard role={account.role} tier={account.tier} />}
-      <div className="sidebar-status"><span><StatusDot good /><b>Proteção ativa</b></span><small>Rollback disponível · v{appVersion || "..."}</small></div>
-      <div className="sidebar-account">
-        <div className="avatar">
-          {account.discord_avatar_url ? (
-            <img src={account.discord_avatar_url} alt="" referrerPolicy="no-referrer" />
-          ) : (
-            <UserRound size={17} />
-          )}
-        </div>
-        <div>
-          <strong title={account.username}>{account.display_name || account.username}</strong>
-          <span title={`Discord verificado · ${formatExpiry(account.expires_at)}`}>
-            {account.discord_verified && <ShieldCheck size={11} />}
-            {ROLE_LABEL[account.role] ?? account.role}
-            {account.tier ? ` · ${tierLabel(account.tier)}` : " · Acesso interno"}
+
+      {internal && (
+        <button type="button" className="sidebar-role-card" onClick={() => setView("internal")}>
+          <span className="coroa"><Crown size={17} /></span>
+          <span>
+            <em>Acesso interno</em>
+            <strong>{cargo}</strong>
+            <small>{account.tier ? tierLabel(account.tier) : "sem plano"}</small>
           </span>
-        </div>
-        <button onClick={onLogout} title="Terminar sessão"><LogOut size={16} /></button>
+          <ChevronRight size={14} className="seta" />
+          <span className="nav-tip">Centro da equipa · {cargo}</span>
+        </button>
+      )}
+
+      <div className="sidebar-status" title={`Proteção ativa · rollback disponível · v${appVersion || "..."}`}>
+        <span className="escudo"><ShieldCheck size={15} /></span>
+        <span>
+          <b><i className="pulso" />Proteção ativa</b>
+          <small>Rollback disponível · v{appVersion || "..."}</small>
+        </span>
+      </div>
+
+      <div className="sidebar-account" ref={perfilRef}>
+        <AnimatePresence>
+          {menuAberto && (
+            <motion.div
+              className="sidebar-menu"
+              role="menu"
+              initial={{ opacity: 0, y: 6, scale: .98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 4, scale: .99 }}
+              transition={{ duration: .2, ease: [.22, 1, .36, 1] }}
+            >
+              {MENU_PERFIL.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setMenuAberto(false); onAbrirDefinicoes(item.ancora); }}
+                >
+                  {item.icone}{item.label}
+                </button>
+              ))}
+              <hr />
+              <button type="button" role="menuitem" className="sair" onClick={() => { setMenuAberto(false); onLogout(); }}>
+                <LogOut />Terminar sessão
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button
+          type="button"
+          className="sidebar-account-button"
+          onClick={() => setMenuAberto((v) => !v)}
+          aria-expanded={menuAberto}
+          aria-haspopup="menu"
+          title={`${account.display_name || account.username} · ${cargo}`}
+        >
+          <span className="avatar">
+            {account.discord_avatar_url ? (
+              <img src={account.discord_avatar_url} alt="" referrerPolicy="no-referrer" />
+            ) : (
+              <UserRound size={17} />
+            )}
+            <i className="online" title="Sessão ativa" />
+          </span>
+          <span style={{ minWidth: 0 }}>
+            <strong>{account.display_name || account.username}</strong>
+            <span className="linha2">
+              {account.discord_verified && <ShieldCheck size={10} />}
+              {cargo}{account.tier ? ` · ${tierLabel(account.tier)}` : " · Acesso interno"}
+            </span>
+          </span>
+          <ChevronUp size={14} className="chevron" />
+        </button>
       </div>
     </aside>
-  );
-}
-
-function SidebarRoleCard({ role, tier }: { role: string; tier: string | null }) {
-  return (
-    <div className="sidebar-role-card">
-      <span><Crown size={13} />Acesso interno</span>
-      <strong>{ROLE_LABEL[role] ?? role}</strong>
-      <small>{role === "owner" ? "Todas as ferramentas" : role === "developer" ? "Catálogo e operação" : "Suporte e presença"} · {tier ? tierLabel(tier) : "sem plano"}</small>
-    </div>
   );
 }
 
@@ -646,8 +825,25 @@ function SidebarSection({ label, children }: { label: string; children: ReactNod
   );
 }
 
-function NavButton({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
-  return <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}>{icon}<span>{label}</span>{active && <motion.i layoutId="nav-active" />}</button>;
+function NavButton({ active, icon, label, onClick, badge, ponto }: {
+  active: boolean;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  badge?: string | null;
+  ponto?: boolean;
+}) {
+  return (
+    <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick} title={label}>
+      {icon}
+      <span>{label}</span>
+      {badge && <span className="nav-badge">{badge}</span>}
+      {ponto && !badge && <span className="nav-badge ponto" aria-label="Novidade" />}
+      {active && !badge && !ponto && <span className="nav-dot" aria-hidden />}
+      {active && <motion.i layoutId="nav-active" />}
+      <span className="nav-tip">{label}</span>
+    </button>
+  );
 }
 
 function CatalogView({
@@ -2003,11 +2199,15 @@ function OperationMetric({ label, value, detail, tone = "default" }: { label: st
   return <div className={`operation-metric ${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>;
 }
 
-function SettingsView({ account, profile, settings, appVersion, theme, setTheme, animations, setAnimations, density, setDensity, onElevate }: {
+function SettingsView({ account, profile, settings, appVersion, theme, setTheme, animations, setAnimations, density, setDensity, onElevate, compacta, setCompacta, ancora }: {
   account: OrionAccount;
   profile: SystemProfile | null;
   settings: LoginSettings;
   appVersion: string;
+  compacta: boolean;
+  setCompacta: (v: boolean) => void;
+  /** Painel para onde rolar, vindo do menu do perfil. */
+  ancora: string | null;
   theme: Theme;
   setTheme: (theme: Theme) => void;
   animations: boolean;
@@ -2018,6 +2218,17 @@ function SettingsView({ account, profile, settings, appVersion, theme, setTheme,
 }) {
   const [elevating, setElevating] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  // Rola ate ao painel escolhido no menu do perfil. Sem isto os itens do
+  // menu abriam as Definicoes no topo e o utilizador ficava a procurar a
+  // seccao a mao - que e o mesmo que o item nao fazer nada.
+  useEffect(() => {
+    if (!ancora) return;
+    const alvo = document.getElementById(ancora);
+    if (!alvo) return;
+    alvo.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [ancora]);
+
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings>(() => {
     try {
       return { ...DEFAULT_DESKTOP_SETTINGS, ...JSON.parse(localStorage.getItem(DESKTOP_SETTINGS_KEY) || "{}") };
@@ -2092,7 +2303,8 @@ function SettingsView({ account, profile, settings, appVersion, theme, setTheme,
         </SettingsPanel>
 
         <SettingsPanel icon={<MonitorCog size={17} />} title="Interface" subtitle="Navegação, confirmações e preferências de fluxo">
-          <SwitchSetting title="Barra lateral compacta" description="Preparado para reduzir a sidebar em ecrãs pequenos." checked={desktopSettings.compactSidebar} onChange={(value) => updateDesktopSetting("compactSidebar", value)} />
+          {/* Ligada ao estado real da barra. Dizia "Preparado para" e nao fazia nada. */}
+          <SwitchSetting title="Barra lateral compacta" description="Mostra só os ícones, com o nome da página ao passar o rato." checked={compacta} onChange={setCompacta} />
           <SwitchSetting title="Mostrar descrições" description="Mostra texto secundário por baixo dos títulos." checked={desktopSettings.showDescriptions} onChange={(value) => updateDesktopSetting("showDescriptions", value)} />
           <SwitchSetting title="Mostrar tooltips" description="Ativa ajudas contextuais em opções avançadas." checked={desktopSettings.showTooltips} onChange={(value) => updateDesktopSetting("showTooltips", value)} />
           <SwitchSetting title="Confirmar antes de aplicar otimizações" description="Pede confirmação antes de mexer no sistema." checked={desktopSettings.confirmBeforeApply} onChange={(value) => updateDesktopSetting("confirmBeforeApply", value)} />
@@ -2216,8 +2428,13 @@ function SettingsView({ account, profile, settings, appVersion, theme, setTheme,
   );
 }
 
+/** O id vem do titulo e e o alvo das ancoras do menu do perfil. */
+function idDoPainel(titulo: string): string {
+  return titulo.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
 function SettingsPanel({ icon, title, subtitle, children }: { icon: ReactNode; title: string; subtitle: string; children: ReactNode }) {
-  return <section className="settings-panel"><div className="settings-panel-heading"><span className="settings-panel-icon">{icon}</span><div><h2>{title}</h2><p>{subtitle}</p></div></div><div className="settings-control-list">{children}</div></section>;
+  return <section className="settings-panel" id={idDoPainel(title)}><div className="settings-panel-heading"><span className="settings-panel-icon">{icon}</span><div><h2>{title}</h2><p>{subtitle}</p></div></div><div className="settings-control-list">{children}</div></section>;
 }
 
 function SettingTitle({ title, description, tooltip }: { title: string; description: string; tooltip?: string }) {
