@@ -836,7 +836,10 @@ function NavButton({ active, icon, label, onClick, badge, ponto }: {
   return (
     <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick} title={label}>
       {icon}
-      <span>{label}</span>
+      {/* Classe propria. Com o seletor `.nav-button > span` a apanhar
+          TODOS os spans filhos, o `flex: 1` do rotulo caia tambem no
+          ponto, no badge e no tooltip - e esticava-os. */}
+      <span className="nav-label">{label}</span>
       {badge && <span className="nav-badge">{badge}</span>}
       {ponto && !badge && <span className="nav-badge ponto" aria-label="Novidade" />}
       {active && !badge && !ponto && <span className="nav-dot" aria-hidden />}
