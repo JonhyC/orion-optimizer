@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
+import { motivoDeIndisponibilidade } from "@/lib/indisponivel";
 import { cookies } from "next/headers";
 import {
   applicationUrl,
@@ -20,7 +21,28 @@ export const dynamic = "force-dynamic";
 
 const STATE_COOKIE = "orion_oauth_state";
 
+/**
+ * Callback do Discord.
+ *
+ * O corpo real vive em processarCallback. Esta camada existe so para
+ * apanhar excepcoes: a rota ja tinha um caminho de erro desenhado - o
+ * back(), que volta ao login com a razao - mas nao o usava para
+ * excepcoes. Bastava a base de dados falhar (quota esgotada, por
+ * exemplo) para o utilizador levar com um 500 da Vercel a meio do login,
+ * sem nada que lhe dissesse o que fazer nem como voltar.
+ */
 export async function GET(req: Request) {
+  const base = discordConfig()?.appUrl ?? applicationUrl();
+  try {
+    return await processarCallback(req);
+  } catch (erro) {
+    console.error('[orion] callback do Discord falhou:', (erro as Error)?.message ?? erro);
+    const motivo = motivoDeIndisponibilidade(erro) ? 'indisponivel' : 'falhou';
+    return NextResponse.redirect(new URL(`/panel/login?error=${motivo}`, base));
+  }
+}
+
+async function processarCallback(req: Request) {
   await processExpiredPlans();
   const cfg = discordConfig();
   const base = cfg?.appUrl ?? applicationUrl();

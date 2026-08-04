@@ -14,6 +14,11 @@ const ERRORS: Record<string, string> = {
   identity_failed: "Nao foi possivel ler a tua conta no Discord.",
   not_member: "Tens de pertencer ao servidor Discord do Orion para entrar.",
   suspended: "Esta conta esta suspensa.",
+  // Os dois abaixo vem do try/catch do callback. Sem eles, uma excepcao a
+  // meio do login dava um 500 da Vercel - uma pagina de erro do browser,
+  // sem nada que dissesse o que fazer nem como voltar.
+  indisponivel: "A base de dados esta temporariamente indisponivel. Tenta daqui a pouco.",
+  falhou: "Nao foi possivel concluir o login pelo Discord. Tenta outra vez.",
 };
 
 export default async function LoginPage({
