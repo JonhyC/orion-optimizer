@@ -1873,22 +1873,10 @@ function AdminWorkspace({
   if (tool.kind === "users") {
     return (
       <AdminPage title="Gestão de Contas" subtitle="Utilizadores, perfis, filtros e ações de acesso" tool={tool} onOpenPortal={onOpenPortal}>
-        <AdminToolbar search={peopleSearch} setSearch={setPeopleSearch} filters={["Todos", "Online", "Clientes", "Staff", "Suspensos"]} sort={["Último login", "Registo", "Plano", "Cargo"]} />
-        <AdminTable
-          columns={["Utilizador", "Discord", "Hardware ID", "Último login", "Estado", "Plano", "Cargo", "Ações"]}
-          rows={visiblePeople.map((person) => [
-            person.displayName,
-            person.username,
-            "API",
-            relativeTime(Math.max(person.siteSeenAt ?? 0, person.optimizerSeenAt ?? 0, person.lastActivityAt ?? 0) || null),
-            person.status,
-            person.tier ? tierLabel(person.tier) : "Sem plano",
-            ROLE_LABEL[person.role] ?? person.role,
-            "Alterar plano · Cargo · Suspender · Banir",
-          ])}
-          empty="Sem utilizadores para mostrar."
-        />
-        <AdminActionGrid actions={["Alterar plano", "Alterar cargo", "Suspender", "Banir", "Revogar licença", "Renovar licença", "Dar acesso Beta", "Resetar acesso"]} />
+        {/* Substitui uma tabela de <span> e oito <button> sem onClick
+            nenhum. Carrega-se numa linha e as accoes disponiveis para o
+            teu cargo aparecem - e fazem mesmo o que dizem. */}
+        <EquipaContas />
       </AdminPage>
     );
   }
@@ -2478,3 +2466,158 @@ function Spinner() { return <span className="spinner" />; }
 function PageMotion({ children }: { children: ReactNode }) { return <motion.div className="page" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.2 }}>{children}</motion.div>; }
 function EmptyState({ icon, title, text }: { icon: ReactNode; title: string; text: string }) { return <div className="empty-state"><div>{icon}</div><strong>{title}</strong><span>{text}</span></div>; }
 function Toast({ tone, message, onClose }: { tone: "good" | "bad"; message: string; onClose: () => void }) { useEffect(() => { const timer = setTimeout(onClose, 4500); return () => clearTimeout(timer); }, [onClose]); return <motion.div className={`toast ${tone}`} initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}>{tone === "good" ? <Check size={16} /> : <CircleAlert size={16} />}<span>{message}</span><button onClick={onClose}><X size={14} /></button></motion.div>; }
+
+/** Rotulo humano para cada accao, e se pede confirmacao. */
+const ACCOES_CONTA: Array<{
+  id: string;
+  label: string;
+  perigosa?: boolean;
+  pede?: "plano" | "cargo" | "dias";
+  so?: (u: ContaEquipa) => boolean;
+}> = [
+  { id: "alterar_plano", label: "Alterar plano", pede: "plano" },
+  { id: "alterar_cargo", label: "Alterar cargo", pede: "cargo" },
+  { id: "renovar_licenca", label: "Renovar licença", pede: "dias" },
+  { id: "revogar_licenca", label: "Revogar licença", perigosa: true, so: (u) => u.tier !== null },
+  { id: "suspender", label: "Suspender", perigosa: true, so: (u) => u.status === "active" },
+  { id: "reativar", label: "Reativar", so: (u) => u.status !== "active" },
+  { id: "banir", label: "Banir", perigosa: true, so: (u) => u.status !== "banned" },
+  { id: "reset_hardware", label: "Reset hardware", so: (u) => Boolean(u.hwid) },
+];
+
+type ContaEquipa = Awaited<ReturnType<OrionApi["internalUsers"]>>["users"][number];
+
+/**
+ * Contas do Centro da Equipa.
+ *
+ * Substitui uma tabela de <span> e oito <button> sem onClick nenhum. Cada
+ * accao chama o servidor, que e quem decide se o cargo a permite - a
+ * lista `allowed` que vem de la serve so para nao mostrar botoes que iam
+ * dar 403.
+ */
+function EquipaContas() {
+  const [dados, setDados] = useState<Awaited<ReturnType<OrionApi["internalUsers"]>> | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [selecionado, setSelecionado] = useState<number | null>(null);
+  const [pendente, setPendente] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<{ tone: "good" | "bad"; message: string } | null>(null);
+  const [pesquisa, setPesquisa] = useState("");
+
+  const carregar = async () => {
+    try {
+      setDados(await window.orion.internalUsers());
+      setErro(null);
+    } catch (e) {
+      setErro((e as Error).message);
+    }
+  };
+  useEffect(() => { void carregar(); }, []);
+
+  const lista = useMemo(() => {
+    const q = pesquisa.trim().toLowerCase();
+    return (dados?.users ?? []).filter((u) =>
+      !q || `${u.username} ${u.discord_username ?? ""} ${u.tier ?? ""} ${u.role}`.toLowerCase().includes(q),
+    );
+  }, [dados, pesquisa]);
+
+  const alvo = lista.find((u) => u.id === selecionado) ?? null;
+
+  async function executar(accao: typeof ACCOES_CONTA[number], valor?: string | number) {
+    if (!alvo) return;
+    if (accao.perigosa && !window.confirm(`${accao.label} — ${alvo.discord_username ?? alvo.username}?\n\nEsta ação não se desfaz sozinha.`)) return;
+    setPendente(accao.id);
+    try {
+      await window.orion.internalUserAction({ action: accao.id, userId: alvo.id, value: valor });
+      setAviso({ tone: "good", message: `${accao.label} aplicado.` });
+      await carregar();
+    } catch (e) {
+      setAviso({ tone: "bad", message: (e as Error).message });
+    } finally {
+      setPendente(null);
+    }
+  }
+
+  if (erro) return <div className="internal-modal-empty">{erro}</div>;
+  if (!dados) return <div className="internal-modal-empty">A carregar contas…</div>;
+
+  return (
+    <div className="equipa-contas">
+      <input
+        className="equipa-pesquisa"
+        value={pesquisa}
+        onChange={(e) => setPesquisa(e.target.value)}
+        placeholder="Pesquisar por nome, Discord, plano ou cargo"
+      />
+
+      {aviso && <div className={`equipa-aviso ${aviso.tone}`}>{aviso.message}</div>}
+
+      <div className="admin-table">
+        <div className="admin-table-head">
+          {["Utilizador", "Discord", "Estado", "Plano", "Cargo"].map((c) => <span key={c}>{c}</span>)}
+        </div>
+        {lista.map((u) => (
+          <button
+            key={u.id}
+            type="button"
+            className={`admin-table-row clicavel ${u.id === selecionado ? "selecionada" : ""}`}
+            onClick={() => setSelecionado(u.id === selecionado ? null : u.id)}
+          >
+            <span>{u.username}</span>
+            <span>{u.discord_username ?? "—"}</span>
+            <span>{u.status}</span>
+            <span>{u.tier ? tierLabel(u.tier) : "Sem plano"}</span>
+            <span>{ROLE_LABEL[u.role] ?? u.role}</span>
+          </button>
+        ))}
+        {!lista.length && <div className="internal-modal-empty">Sem utilizadores para mostrar.</div>}
+      </div>
+
+      {alvo && (
+        <div className="equipa-accoes">
+          <h3>{alvo.discord_username ?? alvo.username}</h3>
+          <p>{ROLE_LABEL[alvo.role] ?? alvo.role} · {alvo.tier ? tierLabel(alvo.tier) : "sem plano"} · {alvo.status}</p>
+
+          <div className="admin-action-grid">
+            {ACCOES_CONTA
+              .filter((a) => dados.allowed.includes(a.id) && (!a.so || a.so(alvo)))
+              .map((a) => {
+                if (a.pede === "plano") {
+                  return (
+                    <select key={a.id} className="settings-action" disabled={pendente !== null} defaultValue=""
+                      onChange={(e) => { if (e.target.value) void executar(a, e.target.value); e.target.value = ""; }}>
+                      <option value="">{a.label}…</option>
+                      {dados.plans.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+                    </select>
+                  );
+                }
+                if (a.pede === "cargo") {
+                  return (
+                    <select key={a.id} className="settings-action" disabled={pendente !== null} defaultValue=""
+                      onChange={(e) => { if (e.target.value) void executar(a, e.target.value); e.target.value = ""; }}>
+                      <option value="">{a.label}…</option>
+                      {dados.roles.map((r) => <option key={r} value={r}>{ROLE_LABEL[r] ?? r}</option>)}
+                    </select>
+                  );
+                }
+                if (a.pede === "dias") {
+                  return (
+                    <select key={a.id} className="settings-action" disabled={pendente !== null} defaultValue=""
+                      onChange={(e) => { if (e.target.value) void executar(a, Number(e.target.value)); e.target.value = ""; }}>
+                      <option value="">{a.label}…</option>
+                      {[30, 90, 180, 365].map((d) => <option key={d} value={d}>+{d} dias</option>)}
+                    </select>
+                  );
+                }
+                return (
+                  <button key={a.id} type="button" className={`settings-action ${a.perigosa ? "perigosa" : ""}`}
+                    disabled={pendente !== null} onClick={() => void executar(a)}>
+                    {pendente === a.id ? "A aplicar…" : a.label}
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

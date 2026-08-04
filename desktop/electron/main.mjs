@@ -722,6 +722,32 @@ function registerIpc() {
     }
     return api("/api/internal/overview");
   });
+  /**
+   * Contas, para o Centro da Equipa.
+   *
+   * O servidor e que decide o que cada cargo pode fazer - esta
+   * verificacao aqui e so para nao gastar uma ida a rede com um pedido
+   * que vai ser recusado de qualquer maneira.
+   */
+  ipcMain.handle("internal:users", async () => {
+    if (!account || !["staff", "developer", "owner"].includes(account.role)) {
+      throw new Error("Esta area esta disponivel apenas para a equipa Orion.");
+    }
+    return api("/api/internal/users");
+  });
+  ipcMain.handle("internal:userAction", async (_event, payload) => {
+    if (!account || !["staff", "developer", "owner"].includes(account.role)) {
+      throw new Error("Esta area esta disponivel apenas para a equipa Orion.");
+    }
+    return api("/api/internal/users", {
+      method: "POST",
+      body: JSON.stringify({
+        action: String(payload?.action ?? ""),
+        userId: Number(payload?.userId),
+        value: payload?.value,
+      }),
+    });
+  });
   ipcMain.handle("portal:open", async (_event, pathname) => {
     if (!account) throw new Error("Inicia sessao primeiro.");
     const routes = {

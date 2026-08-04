@@ -224,6 +224,13 @@ type OrionApi = {
   performance(options?: { force?: boolean }): Promise<OrionPerformance>;
   displays(options?: { force?: boolean }): Promise<{ items: OrionDisplay[] }>;
   internalOverview(): Promise<InternalOverview>;
+  internalUsers(): Promise<{
+    users: Array<{ id: number; username: string; discord_username: string | null; role: string; tier: string | null; status: string; hwid: string | null; expires_at: number | null; client_seen_at: number | null; client_version: string | null }>;
+    plans: Array<{ code: string; name: string }>;
+    roles: string[];
+    allowed: string[];
+  }>;
+  internalUserAction(payload: { action: string; userId: number; value?: string | number }): Promise<Record<string, unknown>>;
   openPortal(pathname: string): Promise<boolean>;
   minimize(): void;
   maximize(): void;

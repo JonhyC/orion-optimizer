@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("orion", {
   performance: (options) => ipcRenderer.invoke("performance:snapshot", options),
   displays: (options) => ipcRenderer.invoke("display:list", options),
   internalOverview: () => ipcRenderer.invoke("internal:overview"),
+  internalUsers: () => ipcRenderer.invoke("internal:users"),
+  internalUserAction: (payload) => ipcRenderer.invoke("internal:userAction", payload),
   openPortal: (pathname) => ipcRenderer.invoke("portal:open", pathname),
   minimize: () => ipcRenderer.send("window:minimize"),
   maximize: () => ipcRenderer.send("window:maximize"),
