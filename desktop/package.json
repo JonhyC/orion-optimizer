@@ -40,7 +40,7 @@
     "appId": "pt.orionoptimizer.desktop",
     "productName": "Orion Optimizer 2.0",
     "asar": true,
-    "forceCodeSigning": true,
+    "forceCodeSigning": false,
     "protocols": [
       {
         "name": "Orion Optimizer 2.0",
