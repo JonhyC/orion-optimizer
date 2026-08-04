@@ -16,5 +16,7 @@ function authorized(req: Request): boolean {
 
 export async function POST(req: Request) {
   if (!authorized(req)) return fail("Nao autorizado.", 401, "unauthorized");
-  return ok(await processExpiredPlans());
+  // O cron e quem tem de fazer o trabalho a serio: ignora o intervalo
+  // minimo que trava as chamadas vindas das paginas.
+  return ok(await processExpiredPlans({ forcar: true }));
 }

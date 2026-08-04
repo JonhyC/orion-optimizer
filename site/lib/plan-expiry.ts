@@ -81,7 +81,30 @@ export async function flushDiscordRoleSync(limit = 25): Promise<{
  * Expira primeiro na base de dados e so depois contacta o Discord. Assim uma
  * falha externa nunca prolonga o acesso ao optimizer.
  */
-export async function processExpiredPlans(): Promise<ExpiryResult> {
+/**
+ * Ultima vez que a varredura correu, por instancia.
+ *
+ * O processExpiredPlans e chamado de seis sitios, incluindo o painel do
+ * cliente a CADA carregamento de pagina. Cada chamada faz uma consulta a
+ * coleccao de utilizadores para encontrar planos expirados - trabalho que
+ * so precisa de acontecer de vez em quando, nao a cada visita, e que
+ * ajudou a esgotar a quota diaria do Firestore.
+ *
+ * Cinco minutos e folgado: um plano que expira e apanhado na proxima
+ * varredura, e o /api/cron/expire-plans continua a forcar quando e
+ * mesmo preciso.
+ */
+let ultimaVarredura = 0;
+const INTERVALO_MINIMO_MS = 5 * 60 * 1000;
+const SEM_ALTERACOES: ExpiryResult = { expired: 0, discordSynced: 0, discordPending: 0 };
+
+export async function processExpiredPlans(opcoes?: { forcar?: boolean }): Promise<ExpiryResult> {
+  const agoraMs = Date.now();
+  if (!opcoes?.forcar && agoraMs - ultimaVarredura < INTERVALO_MINIMO_MS) {
+    return SEM_ALTERACOES;
+  }
+  ultimaVarredura = agoraMs;
+
   const now = agora();
   const expirados = await expiredPlanUsers(now);
 

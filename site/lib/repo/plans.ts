@@ -73,7 +73,14 @@ function doDocumento(dados: Record<string, unknown>, id: number): Plan {
 }
 
 export async function allPlans(): Promise<Plan[]> {
-  return cached("plans:all", 10_000, readAllPlans);
+  // 5 minutos, nao 10 segundos.
+  //
+  // Os planos sao lidos em quase todas as paginas publicas e mudam
+  // raramente. Com 10 segundos, e uma cache que vive em memoria por
+  // instancia do Vercel, praticamente todos os pedidos iam ao Firestore.
+  // O updatePlan/createPlan/deletePlan chamam invalidateCache("plans:"),
+  // portanto uma alteracao no painel continua a aparecer de imediato.
+  return cached("plans:all", 300_000, readAllPlans);
 }
 
 async function readAllPlans(): Promise<Plan[]> {
