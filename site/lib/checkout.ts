@@ -102,7 +102,15 @@ async function createStripeSession(order: Order, planName: string): Promise<stri
     "line_items[0][price_data][currency]": order.currency.toLowerCase(),
     "line_items[0][price_data][unit_amount]": String(order.amount_cents),
     "line_items[0][price_data][product_data][name]": planName,
-    "payment_method_types[0]": "card",
+    // Sem `payment_method_types`, de proposito.
+    //
+    // Estava fixo em "card", o que fazia a sessao do Stripe oferecer SO
+    // cartao - escolher Apple Pay no nosso checkout levava a uma pagina
+    // onde o Apple Pay nem aparecia. Omitir o campo activa os "automatic
+    // payment methods": o Stripe mostra o que estiver ligado no painel e
+    // for suportado pelo dispositivo, incluindo Apple Pay no Safari e no
+    // iPhone. E tambem o que evita ter de mexer aqui sempre que se
+    // active um metodo novo no Stripe.
   });
 
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
