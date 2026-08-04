@@ -23,10 +23,22 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   try {
     user = await currentUser();
   } catch (erro) {
-    const motivo = motivoDeIndisponibilidade(erro);
-    if (!motivo) throw erro;
+    // Apanha TUDO, de proposito.
+    //
+    // A primeira versao so tratava os erros que conseguisse identificar
+    // como falha de infraestrutura e voltava a lancar o resto. Em
+    // producao isso nao chegou: o Next redige a mensagem e o objecto
+    // chega sem o campo `code`, portanto a quota esgotada nao era
+    // reconhecida, o erro subia na mesma e o painel voltava ao ecra de
+    // "Alguma coisa correu mal".
+    //
+    // Nao ha aqui decisao nenhuma que dependa de saber a causa: se nao se
+    // consegue ler a sessao, o painel nao pode ser desenhado, ponto. A
+    // causa serve so para afinar a frase, e ha uma generica para quando
+    // nao se sabe.
     console.error("[orion] painel indisponivel:", (erro as Error)?.message ?? erro);
-    return <PainelIndisponivel {...textoIndisponivel(motivo)} />;
+    const motivo = motivoDeIndisponibilidade(erro);
+    return <PainelIndisponivel {...textoIndisponivel(motivo ?? "ligacao")} />;
   }
 
   const hasDashboard = Boolean(user?.tier) || roleAtLeast(user, "staff");

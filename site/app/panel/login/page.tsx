@@ -30,7 +30,21 @@ export default async function LoginPage({
 
   // Quem ja tem sessao nao tem nada que fazer aqui - por exemplo ao clicar
   // no "Sign in" que o rodape mostra sempre.
-  if (await currentUser()) redirect("/panel");
+  //
+  // Se a base de dados nao responder, mostra-se o formulario. Esta e a
+  // ULTIMA pagina que pode rebentar: e para onde tudo o resto manda quem
+  // nao tem sessao, incluindo o callback do Discord quando falha. Deixa-la
+  // cair no ecra de erro fechava a porta de entrada toda.
+  //
+  // O redirect() fica FORA do try: o Next implementa-o lancando uma
+  // excepcao propria, e apanha-la aqui engolia a navegacao.
+  let comSessao = false;
+  try {
+    comSessao = (await currentUser()) !== null;
+  } catch (erro) {
+    console.error("[orion] login sem base de dados:", (erro as Error)?.message ?? erro);
+  }
+  if (comSessao) redirect("/panel");
 
   const discordEnabled = discordConfig() !== null;
   const setup = discordSetupStatus();

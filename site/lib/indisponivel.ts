@@ -44,6 +44,7 @@ export function textoIndisponivel(motivo: Exclude<MotivoIndisponivel, null>): {
   }
   return {
     titulo: "Não foi possível contactar a base de dados",
-    detalhe: "A ligação falhou. Tenta novamente daqui a instantes.",
+    detalhe:
+      "O serviço não respondeu. Tenta novamente daqui a instantes — se continuar, pode ser o limite diário de leituras, que reinicia à meia-noite (hora do Pacífico).",
   };
 }
