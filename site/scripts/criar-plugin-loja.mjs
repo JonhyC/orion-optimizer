@@ -33,21 +33,21 @@ const manifesto = {
     {
       kind: "loja",
       title: "Ofertas",
-      note: "Preços indicativos de lojas externas. Confirma sempre na loja antes de comprar.",
+      note: "Comparação entre lojas via IsThereAnyDeal. O botão Ver abre a loja mais barata.",
+      // Os precos NAO vivem aqui. O manifesto diz apenas QUE jogos
+      // mostrar; a aplicacao pede os precos ao servidor, que os busca ao
+      // IsThereAnyDeal e escolhe o mais barato. O campo price fica como
+      // rotulo de recurso para versoes antigas da aplicacao.
       items: [
-        { name: "Counter-Strike 2", price: "Grátis", url: "https://store.steampowered.com/app/730/", store: "Steam", match: "counter-strike" },
-        { name: "Elden Ring", price: "desde 34,99 €", url: "https://www.allkeyshop.com/blog/buy-elden-ring-cd-key-compare-prices/", store: "AllKeyShop", match: "elden ring" },
-        { name: "Cyberpunk 2077", price: "desde 19,99 €", url: "https://www.allkeyshop.com/blog/buy-cyberpunk-2077-cd-key-compare-prices/", store: "AllKeyShop", match: "cyberpunk" },
-        { name: "Red Dead Redemption 2", price: "desde 17,99 €", url: "https://www.allkeyshop.com/blog/buy-red-dead-redemption-2-cd-key-compare-prices/", store: "AllKeyShop", match: "red dead" },
-        { name: "EA SPORTS FC 25", price: "desde 24,99 €", url: "https://www.allkeyshop.com/blog/buy-ea-sports-fc-25-cd-key-compare-prices/", store: "AllKeyShop", match: "fc 25" },
-        { name: "Hogwarts Legacy", price: "desde 21,99 €", url: "https://www.allkeyshop.com/blog/buy-hogwarts-legacy-cd-key-compare-prices/", store: "AllKeyShop", match: "hogwarts" },
+        { name: "Counter-Strike 2", price: "—", url: "https://isthereanydeal.com", match: "counter-strike" },
+        { name: "Elden Ring", price: "—", url: "https://isthereanydeal.com", match: "elden ring" },
+        { name: "Cyberpunk 2077", price: "—", url: "https://isthereanydeal.com", match: "cyberpunk" },
+        { name: "Red Dead Redemption 2", price: "—", url: "https://isthereanydeal.com", match: "red dead" },
+        { name: "Hogwarts Legacy", price: "—", url: "https://isthereanydeal.com", match: "hogwarts" },
+        { name: "Baldurs Gate 3", price: "—", url: "https://isthereanydeal.com", match: "baldur" },
+        { name: "Helldivers 2", price: "—", url: "https://isthereanydeal.com", match: "helldivers" },
+        { name: "It Takes Two", price: "—", url: "https://isthereanydeal.com", match: "it takes two" },
       ],
-    },
-    {
-      kind: "ligacao",
-      label: "Ver todos os jogos no AllKeyShop",
-      url: "https://www.allkeyshop.com/blog/",
-      note: "Abre no teu browser. O Orion não processa nenhuma compra.",
     },
   ],
 };

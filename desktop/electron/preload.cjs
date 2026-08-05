@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld("orion", {
   internalOverview: () => ipcRenderer.invoke("internal:overview"),
   internalUsers: () => ipcRenderer.invoke("internal:users"),
   pluginsList: () => ipcRenderer.invoke("plugins:list"),
+  dealsLookup: (payload) => ipcRenderer.invoke("deals:lookup", payload),
   pluginsSave: (manifesto) => ipcRenderer.invoke("plugins:save", manifesto),
   pluginsDelete: (id) => ipcRenderer.invoke("plugins:delete", id),
   internalUserAction: (payload) => ipcRenderer.invoke("internal:userAction", payload),

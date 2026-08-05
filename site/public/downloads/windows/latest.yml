@@ -1,8 +1,8 @@
-version: 2.3.1
+version: 2.3.2
 files:
-  - url: Orion Optimizer 2.0 Setup 2.3.1.exe
-    sha512: m7RU/6IEpvwt7hgUdIGqqjqeL1lDrAVDCP6asnEa1qUIK0q45KnxJAC0Ym1bYRglTUx+9zQe2W/1KBASgoumEw==
-    size: 108632867
-path: Orion Optimizer 2.0 Setup 2.3.1.exe
-sha512: m7RU/6IEpvwt7hgUdIGqqjqeL1lDrAVDCP6asnEa1qUIK0q45KnxJAC0Ym1bYRglTUx+9zQe2W/1KBASgoumEw==
-releaseDate: '2026-08-05T20:53:23.628Z'
+  - url: Orion Optimizer 2.0 Setup 2.3.2.exe
+    sha512: pkWNgvlgOE5ABqo1OWJd7TihWrl6+LRytGEY8IjK4/OLo04yuTBWCfwz9TU7X6RoJZWTQOojyt2dOcxucdpyJw==
+    size: 108634188
+path: Orion Optimizer 2.0 Setup 2.3.2.exe
+sha512: pkWNgvlgOE5ABqo1OWJd7TihWrl6+LRytGEY8IjK4/OLo04yuTBWCfwz9TU7X6RoJZWTQOojyt2dOcxucdpyJw==
+releaseDate: '2026-08-05T21:03:39.924Z'

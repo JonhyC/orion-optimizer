@@ -1,11 +1,13 @@
 {
-  "version": "2.3.1",
+  "version": "2.3.2",
   "downloadPath": "/downloads/Orion-Optimizer-Setup.exe",
-  "sha256": "7de74a4e7a86bd83943107c71840420af1139dc61bd69cfa716c697d162bbf64",
-  "sizeBytes": 108632867,
-  "releasedAt": 1785963222,
+  "sha256": "27b89a899439a7ed1db212cc594765c40080bc4bcc2bc209c651ad7a715d6c40",
+  "sizeBytes": 108634188,
+  "releasedAt": 1785963855,
   "notes": [
-    "Os jogos da biblioteca no plugin Loja passam a poder ser iniciados a partir da aplicacao",
-    "O botao de arranque indica quando a plataforma do jogo nao oferece atalho, em vez de falhar ao ser clicado"
+    "A loja passa a comparar precos entre lojas e a mostrar o mais barato, via IsThereAnyDeal",
+    "O botao Ver abre directamente a loja onde o jogo esta mais barato",
+    "Mostra a percentagem de desconto e assinala os jogos que ja tens instalados",
+    "Os precos deixam de estar fixos no plugin: sao consultados e mantidos em cache no servidor"
   ]
 }

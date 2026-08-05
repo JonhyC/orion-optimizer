@@ -765,6 +765,17 @@ function registerIpc() {
     await shell.openExternal(endereco);
     return true;
   });
+  // Precos comparados. A chave do ITAD fica no servidor.
+  ipcMain.handle("deals:lookup", async (_event, payload) => {
+    if (!account) throw new Error("Inicia sessao primeiro.");
+    return api("/api/internal/deals", {
+      method: "POST",
+      body: JSON.stringify({
+        titles: Array.isArray(payload?.titles) ? payload.titles : [],
+        country: payload?.country ?? "PT",
+      }),
+    });
+  });
   ipcMain.handle("plugins:list", async () => {
     if (!account) throw new Error("Inicia sessao primeiro.");
     return api("/api/internal/plugins");

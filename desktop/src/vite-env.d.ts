@@ -243,6 +243,7 @@ type OrionApi = {
   displays(options?: { force?: boolean }): Promise<{ items: OrionDisplay[] }>;
   internalOverview(): Promise<InternalOverview>;
   openExternal(url: string): Promise<boolean>;
+  dealsLookup(payload: { titles: string[]; country?: string }): Promise<{ deals: Array<{ titulo: string; loja: string; preco: number; moeda: string; desconto: number; url: string; minimoHistorico: number | null }>; source: string; sourceUrl: string }>;
   pluginsList(): Promise<{ plugins: PluginManifesto[]; all: PluginManifesto[]; canEdit: boolean; roles: string[] }>;
   pluginsSave(manifesto: Partial<PluginManifesto> & { id: string }): Promise<{ id: string }>;
   pluginsDelete(id: string): Promise<{ id: string }>;

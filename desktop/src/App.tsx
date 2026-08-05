@@ -2780,38 +2780,7 @@ function PluginBloco({ bloco, jogos, notify }: { bloco: BlocoPlugin; jogos: Orio
     );
   }
 
-  if (bloco.kind === "loja") {
-    const tenho = (item: { name: string; match?: string }) => {
-      const alvo = (item.match ?? item.name).toLowerCase();
-      return jogos.some((j) => j.name.toLowerCase().includes(alvo));
-    };
-    return (
-      <div className="plugin-bloco">
-        <h2>{bloco.title ?? "Loja"}</h2>
-        {bloco.note && <small className="plugin-nota">{bloco.note}</small>}
-        <div className="plugin-loja">
-          {bloco.items.map((item, i) => {
-            const possui = tenho(item);
-            return (
-              <div key={i} className={`plugin-oferta ${possui ? "possui" : ""}`}>
-                <div className="plugin-oferta-info">
-                  <strong>{item.name}</strong>
-                  <small>{item.store ?? "Loja externa"}{possui ? " · já tens instalado" : ""}</small>
-                </div>
-                <span className="plugin-preco">{item.price}</span>
-                <button type="button" className="settings-action" onClick={() => abrir(item.url)}>
-                  Ver<ExternalLink size={13} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-        <small className="plugin-nota">
-          Os preços e a disponibilidade são da loja externa. O Orion não processa esta compra.
-        </small>
-      </div>
-    );
-  }
+  if (bloco.kind === "loja") return <PluginLoja bloco={bloco} jogos={jogos} abrir={abrir} />;
 
   // Tipo que esta aplicacao ainda nao sabe desenhar. Dizer isto e melhor
   // do que nao mostrar nada: quem escreveu o manifesto percebe que
@@ -2819,6 +2788,114 @@ function PluginBloco({ bloco, jogos, notify }: { bloco: BlocoPlugin; jogos: Orio
   return (
     <div className="plugin-bloco">
       <small className="plugin-nota">Este plugin usa um bloco que esta versão do Orion não conhece. Atualiza a aplicação.</small>
+    </div>
+  );
+}
+
+/**
+ * Bloco de loja com comparacao de precos.
+ *
+ * O manifesto passa a dizer apenas QUE jogos mostrar; os precos vem do
+ * IsThereAnyDeal atraves do nosso servidor, que guarda a chave de API e a
+ * cache. Antes os precos estavam escritos no manifesto - ficavam errados
+ * em dias e nao havia como dizer qual era o mais barato.
+ *
+ * Os precos e os URLs sao usados TAL E QUAL vem: os termos do ITAD
+ * proibem alterar os dados, incluindo remover etiquetas de afiliado dos
+ * links. Por isso nada aqui reformata valores nem reescreve urls.
+ */
+function PluginLoja({
+  bloco,
+  jogos,
+  abrir,
+}: {
+  bloco: Extract<BlocoPlugin, { kind: "loja" }>;
+  jogos: OrionGame[];
+  abrir: (url: string) => void;
+}) {
+  const [estado, setEstado] = useState<"a-carregar" | "pronto" | "sem-fonte" | "erro">("a-carregar");
+  const [ofertas, setOfertas] = useState<Awaited<ReturnType<OrionApi["dealsLookup"]>> | null>(null);
+
+  const titulos = useMemo(() => bloco.items.map((i) => i.name), [bloco.items]);
+
+  useEffect(() => {
+    let cancelado = false;
+    window.orion
+      .dealsLookup({ titles: titulos, country: "PT" })
+      .then((r) => {
+        if (cancelado) return;
+        setOfertas(r);
+        setEstado("pronto");
+      })
+      .catch((e) => {
+        if (cancelado) return;
+        // A mensagem distingue "nao configurado" de "falhou agora": a
+        // primeira e trabalho para o dono, a segunda passa sozinha.
+        setEstado(/nao esta configurada|não está configurada/i.test((e as Error).message) ? "sem-fonte" : "erro");
+      });
+    return () => { cancelado = true; };
+  }, [titulos]);
+
+  const tenho = (nome: string, match?: string) => {
+    const alvo = (match ?? nome).toLowerCase();
+    return jogos.some((j) => j.name.toLowerCase().includes(alvo));
+  };
+
+  const porTitulo = new Map((ofertas?.deals ?? []).map((d) => [d.titulo.toLowerCase(), d]));
+
+  return (
+    <div className="plugin-bloco">
+      <h2>{bloco.title ?? "Loja"}</h2>
+      {bloco.note && <small className="plugin-nota">{bloco.note}</small>}
+
+      {estado === "a-carregar" && <div className="internal-modal-empty">A comparar preços…</div>}
+      {estado === "sem-fonte" && (
+        <div className="internal-modal-empty">
+          A comparação de preços ainda não está configurada neste servidor.
+        </div>
+      )}
+      {estado === "erro" && (
+        <div className="internal-modal-empty">Não foi possível obter preços neste momento.</div>
+      )}
+
+      {estado === "pronto" && (
+        <>
+          <div className="plugin-loja">
+            {bloco.items.map((item, i) => {
+              const oferta = porTitulo.get(item.name.toLowerCase());
+              const possui = tenho(item.name, item.match);
+              return (
+                <div key={i} className={`plugin-oferta ${possui ? "possui" : ""}`}>
+                  <div className="plugin-oferta-info">
+                    <strong>{item.name}</strong>
+                    <small>
+                      {oferta ? `mais barato na ${oferta.loja}` : "sem oferta encontrada"}
+                      {oferta && oferta.desconto > 0 ? ` · -${oferta.desconto}%` : ""}
+                      {possui ? " · já tens instalado" : ""}
+                    </small>
+                  </div>
+                  <span className="plugin-preco">
+                    {oferta ? `${oferta.preco.toFixed(2)} ${oferta.moeda}` : "—"}
+                  </span>
+                  <button
+                    type="button"
+                    className="settings-action"
+                    disabled={!oferta}
+                    title={oferta ? `Abrir na ${oferta.loja}` : "Sem oferta para abrir"}
+                    onClick={() => oferta && abrir(oferta.url)}
+                  >
+                    Ver<ExternalLink size={13} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {/* Mencionar a fonte e uma exigencia dos termos do ITAD. */}
+          <small className="plugin-nota">
+            {ofertas?.source ?? "Preços via IsThereAnyDeal"} · a compra é feita na loja, o Orion não a processa.
+          </small>
+        </>
+      )}
     </div>
   );
 }
