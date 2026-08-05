@@ -1,15 +1,11 @@
 {
-  "version": "2.3.0",
+  "version": "2.3.1",
   "downloadPath": "/downloads/Orion-Optimizer-Setup.exe",
-  "sha256": "4ad7a249b1eb83e117e8a6900995c4115955e03d4211c4baed0bfe80820b4901",
-  "sizeBytes": 108633135,
-  "releasedAt": 1785962010,
+  "sha256": "7de74a4e7a86bd83943107c71840420af1139dc61bd69cfa716c697d162bbf64",
+  "sizeBytes": 108632867,
+  "releasedAt": 1785963222,
   "notes": [
-    "Nova aba Plugins, com extensoes configuraveis pelo owner",
-    "Plugin Loja: mostra os jogos que tens instalados e ofertas de lojas externas, com aviso quando ja tens o jogo",
-    "Centro da Equipa: as acoes sobre contas passam a funcionar - alterar plano e cargo, suspender, banir, revogar e renovar licenca, reset de hardware",
-    "Confirmacao obrigatoria antes de qualquer acao destrutiva sobre uma conta",
-    "Barra lateral corrigida: indicador do item activo, largura dos badges e alinhamento dos cartoes",
-    "Roblox e Roblox Studio detetados na biblioteca de jogos"
+    "Os jogos da biblioteca no plugin Loja passam a poder ser iniciados a partir da aplicacao",
+    "O botao de arranque indica quando a plataforma do jogo nao oferece atalho, em vez de falhar ao ser clicado"
   ]
 }
