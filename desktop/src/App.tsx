@@ -2753,8 +2753,26 @@ function PluginBloco({ bloco, jogos, notify }: { bloco: BlocoPlugin; jogos: Orio
         <div className="plugin-jogos">
           {jogos.length ? jogos.map((j) => (
             <div key={j.id} className="plugin-jogo">
-              <strong>{j.name}</strong>
-              <small>{j.platform}</small>
+              <div className="plugin-jogo-info">
+                <strong>{j.name}</strong>
+                <small>{j.platform}</small>
+              </div>
+              {/* So a Steam, a Epic e a Store dao atalho de arranque. O
+                  GOG e o Roblox nao, portanto o botao fica desactivado e
+                  diz porque - em vez de falhar ao ser clicado. */}
+              <button
+                type="button"
+                className="settings-action"
+                disabled={!j.launchUri}
+                title={j.launchUri ? `Iniciar ${j.name}` : "Sem atalho de arranque detetado nesta plataforma"}
+                onClick={() => {
+                  window.orion
+                    .launchGame(j)
+                    .catch((e) => notify({ tone: "bad", message: (e as Error).message }));
+                }}
+              >
+                <Play size={13} />Iniciar
+              </button>
             </div>
           )) : <div className="internal-modal-empty">Nenhum jogo detetado.</div>}
         </div>

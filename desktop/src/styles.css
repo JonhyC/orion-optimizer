@@ -1028,3 +1028,5 @@ button.presence-row:hover { background: rgba(214,167,91,.035); }
 .plugin-oferta-info small { display: block; margin-top: 2px; color: var(--text-3); font-size: 10.5px; }
 .plugin-preco { font-family: Sora, sans-serif; font-size: 13.5px; font-weight: 700; color: var(--violet-strong); white-space: nowrap; }
 @media (max-width: 900px) { .plugins-layout { grid-template-columns: 1fr; } }
+.plugin-jogo { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 9px; }
+.plugin-jogo-info { min-width: 0; }
