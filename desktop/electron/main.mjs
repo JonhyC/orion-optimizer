@@ -748,6 +748,39 @@ function registerIpc() {
       }),
     });
   });
+  // Plugins. Quem pode ver o que e decidido pelo servidor.
+  /**
+   * Abrir um endereco externo no browser do sistema.
+   *
+   * A validacao esta aqui e nao so no ecra: este handler recebe um url
+   * vindo de um manifesto de plugin, e shell.openExternal com um esquema
+   * como file:// ou um comando abriria coisas no PC de quem usa a app.
+   * So http e https passam.
+   */
+  ipcMain.handle("external:open", async (_event, url) => {
+    const endereco = String(url ?? "");
+    if (!/^https?:\/\//i.test(endereco)) {
+      throw new Error("Só são permitidos endereços http ou https.");
+    }
+    await shell.openExternal(endereco);
+    return true;
+  });
+  ipcMain.handle("plugins:list", async () => {
+    if (!account) throw new Error("Inicia sessao primeiro.");
+    return api("/api/internal/plugins");
+  });
+  ipcMain.handle("plugins:save", async (_event, manifesto) => {
+    if (!account || account.role !== "owner") {
+      throw new Error("So o owner pode criar plugins.");
+    }
+    return api("/api/internal/plugins", { method: "POST", body: JSON.stringify(manifesto) });
+  });
+  ipcMain.handle("plugins:delete", async (_event, id) => {
+    if (!account || account.role !== "owner") {
+      throw new Error("So o owner pode apagar plugins.");
+    }
+    return api(`/api/internal/plugins?id=${encodeURIComponent(String(id))}`, { method: "DELETE" });
+  });
   ipcMain.handle("portal:open", async (_event, pathname) => {
     if (!account) throw new Error("Inicia sessao primeiro.");
     const routes = {

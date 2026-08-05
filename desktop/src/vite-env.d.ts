@@ -1,5 +1,23 @@
 /// <reference types="vite/client" />
 
+type BlocoPlugin =
+  | { kind: "texto"; title?: string; body: string }
+  | { kind: "ligacao"; label: string; url: string; note?: string }
+  | { kind: "jogos-instalados"; title?: string; note?: string }
+  | { kind: "loja"; title?: string; note?: string; items: Array<{ name: string; price: string; url: string; store?: string; match?: string }> };
+
+interface PluginManifesto {
+  id: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  roles: string[];
+  active: number;
+  sort_order: number;
+  blocks: BlocoPlugin[];
+  updated_at: number;
+}
+
 type RegistryAction = {
   hive: "HKCU" | "HKLM";
   key: string;
@@ -224,6 +242,10 @@ type OrionApi = {
   performance(options?: { force?: boolean }): Promise<OrionPerformance>;
   displays(options?: { force?: boolean }): Promise<{ items: OrionDisplay[] }>;
   internalOverview(): Promise<InternalOverview>;
+  openExternal(url: string): Promise<boolean>;
+  pluginsList(): Promise<{ plugins: PluginManifesto[]; all: PluginManifesto[]; canEdit: boolean; roles: string[] }>;
+  pluginsSave(manifesto: Partial<PluginManifesto> & { id: string }): Promise<{ id: string }>;
+  pluginsDelete(id: string): Promise<{ id: string }>;
   internalUsers(): Promise<{
     users: Array<{ id: number; username: string; discord_username: string | null; role: string; tier: string | null; status: string; hwid: string | null; expires_at: number | null; client_seen_at: number | null; client_version: string | null }>;
     plans: Array<{ code: string; name: string }>;

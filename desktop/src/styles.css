@@ -1001,3 +1001,30 @@ button.presence-row:hover { background: rgba(214,167,91,.035); }
 .equipa-accoes .admin-action-grid { margin-top: 11px; }
 .settings-action.perigosa { border-color: rgba(238,101,114,.3); color: var(--red); }
 .settings-action:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ------------------------------------------------------------ plugins */
+.plugins-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; margin-top: 22px; }
+.plugins-lista { display: grid; gap: 6px; align-content: start; }
+.plugin-item { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text-2); text-align: left; cursor: pointer; transition: border-color .2s, background .2s; }
+.plugin-item:hover { border-color: var(--border-strong); }
+.plugin-item.activo { border-color: rgba(214,167,91,.4); background: rgba(214,167,91,.07); color: var(--text); }
+.plugin-item svg { flex: 0 0 auto; margin-top: 1px; color: var(--violet-strong); }
+.plugin-item strong { display: block; font-size: 12.5px; }
+.plugin-item small { display: block; margin-top: 2px; color: var(--text-3); font-size: 10.5px; }
+.plugins-conteudo { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.plugin-bloco { padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.plugin-bloco h2 { font-size: 14.5px; }
+.plugin-bloco p { margin-top: 7px; color: var(--text-2); font-size: 13px; line-height: 1.55; }
+.plugin-nota { display: block; margin-top: 9px; color: var(--text-3); font-size: 11px; line-height: 1.5; }
+.plugin-jogos { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-top: 11px; }
+.plugin-jogo { padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px; background: rgba(255,255,255,.02); }
+.plugin-jogo strong { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.plugin-jogo small { display: block; margin-top: 2px; color: var(--text-3); font-size: 10px; }
+.plugin-loja { display: grid; gap: 8px; margin-top: 11px; }
+.plugin-oferta { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 12px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.02); }
+/* Quem ja tem o jogo instalado ve-o assinalado, para nao comprar duas vezes. */
+.plugin-oferta.possui { border-color: rgba(82,201,139,.28); background: rgba(82,201,139,.05); }
+.plugin-oferta-info strong { display: block; overflow: hidden; font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.plugin-oferta-info small { display: block; margin-top: 2px; color: var(--text-3); font-size: 10.5px; }
+.plugin-preco { font-family: Sora, sans-serif; font-size: 13.5px; font-weight: 700; color: var(--violet-strong); white-space: nowrap; }
+@media (max-width: 900px) { .plugins-layout { grid-template-columns: 1fr; } }

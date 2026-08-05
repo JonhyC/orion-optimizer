@@ -1,17 +1,15 @@
 {
-  "version": "2.1.2",
+  "version": "2.3.0",
   "downloadPath": "/downloads/Orion-Optimizer-Setup.exe",
-  "sha256": "d20a09e00ea5561eb8cfa9bf2699f2de352ac28d2a9fb23c07a0022c52ad6769",
-  "sizeBytes": 108630888,
-  "releasedAt": 1785870388,
+  "sha256": "4ad7a249b1eb83e117e8a6900995c4115955e03d4211c4baed0bfe80820b4901",
+  "sizeBytes": 108633135,
+  "releasedAt": 1785962010,
   "notes": [
-    "Roblox e Roblox Studio passam a ser detetados na biblioteca de jogos",
-    "Barra lateral redesenhada: itens com altura igual, estado ativo com barra dourada que desliza e brilho subtil",
-    "Cartao de acesso interno passa a ser clicavel e leva ao Centro da equipa",
-    "Estado da protecao mostra indicador em tempo real com a versao instalada",
-    "Perfil abre menu com atalhos diretos para as seccoes das Definicoes",
-    "Barra lateral pode ficar so com icones, com a preferencia guardada entre arranques",
-    "Em janelas estreitas a barra lateral passa a gaveta, que fecha ao clicar fora",
-    "Contador de otimizacoes ativas e de novidades do historico na propria barra"
+    "Nova aba Plugins, com extensoes configuraveis pelo owner",
+    "Plugin Loja: mostra os jogos que tens instalados e ofertas de lojas externas, com aviso quando ja tens o jogo",
+    "Centro da Equipa: as acoes sobre contas passam a funcionar - alterar plano e cargo, suspender, banir, revogar e renovar licenca, reset de hardware",
+    "Confirmacao obrigatoria antes de qualquer acao destrutiva sobre uma conta",
+    "Barra lateral corrigida: indicador do item activo, largura dos badges e alinhamento dos cartoes",
+    "Roblox e Roblox Studio detetados na biblioteca de jogos"
   ]
 }

@@ -28,6 +28,7 @@ import {
   Network,
   PackageCheck,
   Play,
+  Puzzle,
   RefreshCcw,
   RotateCcw,
   Search,
@@ -46,7 +47,7 @@ import {
 import { FormEvent, ReactNode, useEffect, useMemo, useState, useRef } from "react";
 import logo from "./assets/orion.svg";
 
-type View = "catalog" | "active" | "games" | "performance" | "history" | "settings" | "internal";
+type View = "catalog" | "active" | "games" | "performance" | "history" | "plugins" | "settings" | "internal";
 type Theme = "dark" | "light";
 type Density = "comfortable" | "compact";
 type LoginSettings = { server: string; username: string; password: string };
@@ -468,6 +469,7 @@ export default function App() {
                 {view === "games" && <GamesView key="games" state={catalog} profile={profile} activeOptimizations={activeOptimizations} notify={setToast} onActiveChange={setActiveOptimizations} />}
                 {view === "performance" && <PerformanceView key="performance" profile={profile} notify={setToast} />}
                 {view === "history" && <HistoryView key="history" notify={setToast} onActiveChange={setActiveOptimizations} />}
+                {view === "plugins" && <PluginsView key="plugins" notify={setToast} />}
                 {view === "settings" && <SettingsView key="settings" account={catalog.account} profile={profile} settings={settings} appVersion={appVersion} theme={theme} setTheme={setTheme} animations={animations} setAnimations={setAnimations} density={density} setDensity={setDensity} onElevate={elevateApp} compacta={compacta} setCompacta={(v) => { setCompacta(v); localStorage.setItem("orion-sidebar", v ? "compacta" : "normal"); }} ancora={ancoraDefinicoes} />}
                 {view === "internal" && (
                   <InternalView key="internal" state={catalog} profile={profile} settings={settings} notify={setToast} />
@@ -716,6 +718,7 @@ function Sidebar({ view, setView, account, appVersion, onLogout, compacta, setCo
             onClick={() => setView("history")}
             badge={historicoNovos > 0 ? String(historicoNovos) : null}
           />
+          <NavButton active={view === "plugins"} icon={<Puzzle />} label="Plugins" onClick={() => setView("plugins")} />
         </SidebarSection>
         <SidebarSection label="Conta">
           {/* Sem ponto de novidade: a aplicacao nao tem sinal nenhum de
@@ -2618,6 +2621,186 @@ function EquipaContas() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Aba de Plugins.
+ *
+ * Desenha manifestos. NAO executa nada que venha do servidor: cada tipo
+ * de bloco tem aqui um componente proprio, e um tipo desconhecido e
+ * mostrado como tal em vez de ser interpretado. E essa fronteira que
+ * impede um plugin de fazer mais do que o previsto.
+ */
+function PluginsView({ notify }: { notify: (toast: { tone: "good" | "bad"; message: string }) => void }) {
+  const [dados, setDados] = useState<Awaited<ReturnType<OrionApi["pluginsList"]>> | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [aberto, setAberto] = useState<string | null>(null);
+  const [jogos, setJogos] = useState<OrionGame[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await window.orion.pluginsList();
+        setDados(r);
+        setAberto(r.plugins[0]?.id ?? null);
+      } catch (e) {
+        setErro((e as Error).message);
+      }
+    })();
+  }, []);
+
+  // Os jogos so sao lidos se algum plugin visivel precisar deles. Ler o
+  // disco para nada custa segundos no arranque da aba.
+  const precisaJogos = useMemo(
+    () => (dados?.plugins ?? []).some((p) => p.blocks.some((b) => b.kind === "jogos-instalados" || b.kind === "loja")),
+    [dados],
+  );
+  useEffect(() => {
+    if (!precisaJogos) return;
+    window.orion.games().then((r) => setJogos(r.items)).catch(() => setJogos([]));
+  }, [precisaJogos]);
+
+  if (erro) return <div className="page"><div className="internal-modal-empty">{erro}</div></div>;
+  if (!dados) return <div className="page"><div className="internal-modal-empty">A carregar plugins…</div></div>;
+
+  const plugin = dados.plugins.find((p) => p.id === aberto) ?? null;
+
+  return (
+    <motion.div className="page" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+      <header className="page-header">
+        <div>
+          <span className="eyebrow">EXTENSÕES</span>
+          <h1>Plugins</h1>
+          <p>{dados.plugins.length ? `${dados.plugins.length} disponíveis para o teu acesso` : "Sem plugins disponíveis"}</p>
+        </div>
+      </header>
+
+      {!dados.plugins.length ? (
+        <div className="internal-modal-empty">
+          {dados.canEdit
+            ? "Ainda não há plugins. Cria o primeiro na coleção plugins do Firestore — o formato está em lib/repo/plugins.ts."
+            : "Nenhum plugin foi disponibilizado para o teu acesso."}
+        </div>
+      ) : (
+        <div className="plugins-layout">
+          <nav className="plugins-lista">
+            {dados.plugins.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={`plugin-item ${p.id === aberto ? "activo" : ""}`}
+                onClick={() => setAberto(p.id)}
+              >
+                <Puzzle size={15} />
+                <span>
+                  <strong>{p.name}</strong>
+                  {p.description && <small>{p.description}</small>}
+                </span>
+              </button>
+            ))}
+          </nav>
+
+          <section className="plugins-conteudo">
+            {plugin?.blocks.map((bloco, i) => (
+              <PluginBloco key={i} bloco={bloco} jogos={jogos} notify={notify} />
+            ))}
+          </section>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+function PluginBloco({ bloco, jogos, notify }: { bloco: BlocoPlugin; jogos: OrionGame[]; notify: (t: { tone: "good" | "bad"; message: string }) => void }) {
+  const abrir = (url: string) => {
+    // Segunda barreira. O servidor ja recusa manifestos com urls que nao
+    // sejam http(s), mas um manifesto antigo pode ter passado antes de a
+    // validacao existir.
+    if (!/^https?:\/\//i.test(url)) {
+      notify({ tone: "bad", message: "Ligação bloqueada: só são permitidos endereços http ou https." });
+      return;
+    }
+    void window.orion.openExternal(url);
+  };
+
+  if (bloco.kind === "texto") {
+    return (
+      <div className="plugin-bloco">
+        {bloco.title && <h2>{bloco.title}</h2>}
+        <p>{bloco.body}</p>
+      </div>
+    );
+  }
+
+  if (bloco.kind === "ligacao") {
+    return (
+      <div className="plugin-bloco">
+        <button type="button" className="primary" onClick={() => abrir(bloco.url)}>
+          {bloco.label}<ExternalLink size={15} />
+        </button>
+        {bloco.note && <small className="plugin-nota">{bloco.note}</small>}
+      </div>
+    );
+  }
+
+  if (bloco.kind === "jogos-instalados") {
+    return (
+      <div className="plugin-bloco">
+        <h2>{bloco.title ?? "Jogos instalados"}</h2>
+        {bloco.note && <small className="plugin-nota">{bloco.note}</small>}
+        <div className="plugin-jogos">
+          {jogos.length ? jogos.map((j) => (
+            <div key={j.id} className="plugin-jogo">
+              <strong>{j.name}</strong>
+              <small>{j.platform}</small>
+            </div>
+          )) : <div className="internal-modal-empty">Nenhum jogo detetado.</div>}
+        </div>
+      </div>
+    );
+  }
+
+  if (bloco.kind === "loja") {
+    const tenho = (item: { name: string; match?: string }) => {
+      const alvo = (item.match ?? item.name).toLowerCase();
+      return jogos.some((j) => j.name.toLowerCase().includes(alvo));
+    };
+    return (
+      <div className="plugin-bloco">
+        <h2>{bloco.title ?? "Loja"}</h2>
+        {bloco.note && <small className="plugin-nota">{bloco.note}</small>}
+        <div className="plugin-loja">
+          {bloco.items.map((item, i) => {
+            const possui = tenho(item);
+            return (
+              <div key={i} className={`plugin-oferta ${possui ? "possui" : ""}`}>
+                <div className="plugin-oferta-info">
+                  <strong>{item.name}</strong>
+                  <small>{item.store ?? "Loja externa"}{possui ? " · já tens instalado" : ""}</small>
+                </div>
+                <span className="plugin-preco">{item.price}</span>
+                <button type="button" className="settings-action" onClick={() => abrir(item.url)}>
+                  Ver<ExternalLink size={13} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <small className="plugin-nota">
+          Os preços e a disponibilidade são da loja externa. O Orion não processa esta compra.
+        </small>
+      </div>
+    );
+  }
+
+  // Tipo que esta aplicacao ainda nao sabe desenhar. Dizer isto e melhor
+  // do que nao mostrar nada: quem escreveu o manifesto percebe que
+  // precisa de actualizar a aplicacao.
+  return (
+    <div className="plugin-bloco">
+      <small className="plugin-nota">Este plugin usa um bloco que esta versão do Orion não conhece. Atualiza a aplicação.</small>
     </div>
   );
 }
